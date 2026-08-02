@@ -282,6 +282,9 @@ public class Visualizer {
                 "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:0",
                 "-ea", "-Xmx96m", "-Xss1m", "-XX:ActiveProcessorCount=1",
                 "-XX:-UsePerfData", "-XX:TieredStopAtLevel=1",
+                // env is cleared, so LANG is gone and stdout would fall back to
+                // ASCII — printing Vietnamese as "?"
+                "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8", "-Dfile.encoding=UTF-8",
                 "-cp", classDir.toString(), "Main");
         pb.environment().clear();                 // no host env reaches the traced code
         Process child = pb.start();
