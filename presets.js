@@ -1145,3 +1145,357 @@ const TARGETS = {
   "BST insert & search": ["target", "MỤC TIÊU / TARGET"],
   "Coin change (min coins)": ["target", "SỐ TIỀN / AMOUNT"]
 };
+
+/* ---- design update: 15 more algorithms, plus its "range" category ---- */
+
+PRESETS["Range queries"] = {};
+
+Object.assign(PRESETS["Sorting"], {
+  "Radix sort (LSD)": `public class Main {
+    public static void main(String[] args) {
+        int[] a = {170, 45, 75, 90, 24};
+        int[] out = new int[a.length];
+        for (int exp = 1; exp <= 100; exp *= 10) {
+            int[] count = new int[10];
+            for (int i = 0; i < a.length; i++) count[(a[i] / exp) % 10]++;
+            for (int d = 1; d < 10; d++) count[d] += count[d - 1];
+            for (int i = a.length - 1; i >= 0; i--) out[--count[(a[i] / exp) % 10]] = a[i];
+            for (int i = 0; i < a.length; i++) a[i] = out[i];
+        }
+        System.out.println(java.util.Arrays.toString(a));
+    }
+}`
+});
+
+Object.assign(PRESETS["Graphs"], {
+  "Bellman-Ford": `public class Main {
+    public static void main(String[] args) {
+        final int INF = 99;
+        int[][] w = {
+            {0, 4, 1, INF},
+            {INF, 0, INF, 3},
+            {INF, 2, 0, 6},
+            {INF, INF, INF, 0}};
+        int[] dist = {0, INF, INF, INF};
+        for (int pass = 0; pass < 3; pass++) {
+            for (int u = 0; u < 4; u++)
+                for (int v = 0; v < 4; v++)
+                    if (w[u][v] != INF && dist[u] + w[u][v] < dist[v])
+                        dist[v] = dist[u] + w[u][v];
+        }
+        System.out.println(java.util.Arrays.toString(dist));
+    }
+}`,
+
+  "A* on grid": `public class Main {
+    public static void main(String[] args) {
+        int[][] grid = {{0,0,0},{1,1,0},{0,0,0}};      // 1 = wall
+        int[][] f = new int[3][3];                      // f = g + h, 99 = unvisited
+        for (int r = 0; r < 3; r++) for (int c = 0; c < 3; c++) f[r][c] = 99;
+        int[][] g = new int[3][3];
+        f[0][0] = 4;
+        int[] dr = {1,-1,0,0}, dc = {0,0,1,-1};
+        for (int step = 0; step < 9; step++) {
+            int br = -1, bc = -1, best = 99;
+            for (int r = 0; r < 3; r++)
+                for (int c = 0; c < 3; c++)
+                    if (f[r][c] < best) { best = f[r][c]; br = r; bc = c; }
+            if (br < 0) break;
+            f[br][bc] = 99;                             // close it
+            for (int k = 0; k < 4; k++) {
+                int nr = br + dr[k], nc = bc + dc[k];
+                if (nr < 0 || nr > 2 || nc < 0 || nc > 2 || grid[nr][nc] == 1) continue;
+                int ng = g[br][bc] + 1;
+                if (g[nr][nc] == 0 && !(nr == 0 && nc == 0)) {
+                    g[nr][nc] = ng;
+                    f[nr][nc] = ng + (2 - nr) + (2 - nc);   // Manhattan heuristic
+                }
+            }
+        }
+        System.out.println("g[2][2] = " + g[2][2]);
+    }
+}`
+});
+
+Object.assign(PRESETS["Linked list"], {
+  "Doubly linked list": `public class Main {
+    static class Node {
+        int val;
+        Node prev, next;
+        Node(int v) { val = v; }
+    }
+    public static void main(String[] args) {
+        Node head = new Node(1);
+        Node tail = head;
+        for (int v = 2; v <= 4; v++) {
+            Node n = new Node(v);
+            tail.next = n;
+            n.prev = tail;
+            tail = n;
+        }
+        int forward = 0;
+        for (Node n = head; n != null; n = n.next) forward += n.val;
+        int backward = 0;
+        for (Node n = tail; n != null; n = n.prev) backward += n.val;
+        System.out.println(forward + " " + backward);
+    }
+}`
+});
+
+Object.assign(PRESETS["Stack & queue"], {
+  "Circular queue": `public class Main {
+    public static void main(String[] args) {
+        int[] ring = new int[5];
+        int head = 0, size = 0;
+        for (int v = 1; v <= 4; v++) {                 // offer
+            ring[(head + size) % ring.length] = v;
+            size++;
+        }
+        for (int i = 0; i < 2; i++) {                  // poll twice
+            head = (head + 1) % ring.length;
+            size--;
+        }
+        for (int v = 5; v <= 6; v++) {                 // wrap around the end
+            ring[(head + size) % ring.length] = v;
+            size++;
+        }
+        System.out.println("head = " + head + ", size = " + size);
+    }
+}`,
+
+  "Hash table (linear probing)": `public class Main {
+    public static void main(String[] args) {
+        int[] slots = new int[7];
+        java.util.Arrays.fill(slots, -1);              // -1 = empty
+        int[] keys = {15, 11, 27, 8};
+        for (int i = 0; i < keys.length; i++) {
+            int key = keys[i];
+            int at = key % slots.length;
+            while (slots[at] != -1) at = (at + 1) % slots.length;   // probe
+            slots[at] = key;
+        }
+        int want = 27, found = -1;
+        int at = want % slots.length;
+        while (slots[at] != -1) {
+            if (slots[at] == want) { found = at; break; }
+            at = (at + 1) % slots.length;
+        }
+        System.out.println("27 ở slot " + found);
+    }
+}`
+});
+
+Object.assign(PRESETS["Trees"], {
+  "Trie (prefix tree)": `public class Main {
+    // node 0 is the root; parent[i] is i's parent, label[i] the letter on that edge
+    static int[] parent = {0, 0, 0, 0, 0, 0, 0};
+    static char[] label = new char[7];
+    static int[][] child = new int[7][26];
+    static int used = 1;
+
+    static void insert(String word) {
+        int node = 0;
+        for (int i = 0; i < word.length(); i++) {
+            int c = word.charAt(i) - 'a';
+            if (child[node][c] == 0) {
+                child[node][c] = used;
+                parent[used] = node;
+                label[used] = word.charAt(i);
+                used++;
+            }
+            node = child[node][c];
+        }
+    }
+    public static void main(String[] args) {
+        insert("ab");
+        insert("ac");
+        insert("b");
+        int node = 0;
+        boolean found = true;
+        String q = "ac";
+        for (int i = 0; i < q.length(); i++) {
+            int c = q.charAt(i) - 'a';
+            if (child[node][c] == 0) { found = false; break; }
+            node = child[node][c];
+        }
+        System.out.println("có \\"ac\\"? " + found + ", nút = " + used);
+    }
+}`
+});
+
+Object.assign(PRESETS["Range queries"], {
+  "Segment tree (sum)": `public class Main {
+    // heap layout: node i covers a range, children are 2i+1 and 2i+2
+    static int[] a = {2, 5, 1, 4};
+    static int[] tree = new int[7];
+
+    static void build(int node, int lo, int hi) {
+        if (lo == hi) { tree[node] = a[lo]; return; }
+        int mid = (lo + hi) / 2;
+        build(2 * node + 1, lo, mid);
+        build(2 * node + 2, mid + 1, hi);
+        tree[node] = tree[2 * node + 1] + tree[2 * node + 2];
+    }
+    static int query(int node, int lo, int hi, int from, int to) {
+        if (to < lo || hi < from) return 0;
+        if (from <= lo && hi <= to) return tree[node];
+        int mid = (lo + hi) / 2;
+        return query(2 * node + 1, lo, mid, from, to)
+             + query(2 * node + 2, mid + 1, hi, from, to);
+    }
+    public static void main(String[] args) {
+        build(0, 0, a.length - 1);
+        System.out.println("sum a[1..3] = " + query(0, 0, a.length - 1, 1, 3));
+    }
+}`,
+
+  "Fenwick tree (BIT)": `public class Main {
+    public static void main(String[] args) {
+        int[] a = {3, 2, 5, 1, 4};
+        int[] bit = new int[a.length + 1];
+        for (int i = 0; i < a.length; i++) {            // build by point updates
+            for (int at = i + 1; at < bit.length; at += at & (-at)) bit[at] += a[i];
+        }
+        int sum = 0;
+        for (int at = 4; at > 0; at -= at & (-at)) sum += bit[at];   // prefix sum of a[0..3]
+        System.out.println("prefix(4) = " + sum);
+    }
+}`
+});
+
+Object.assign(PRESETS["Dynamic programming"], {
+  "Subset sum": `public class Main {
+    public static void main(String[] args) {
+        int[] a = {3, 34, 4, 12};
+        int target = 7;
+        int[][] dp = new int[5][8];                    // dp[i][s] = 1 if reachable
+        for (int i = 0; i <= 4; i++) dp[i][0] = 1;
+        for (int i = 1; i <= 4; i++) {
+            for (int s = 1; s <= target; s++) {
+                dp[i][s] = dp[i - 1][s];
+                if (a[i - 1] <= s && dp[i - 1][s - a[i - 1]] == 1) dp[i][s] = 1;
+            }
+        }
+        System.out.println("tổng " + target + " được? " + (dp[4][target] == 1));
+    }
+}`,
+
+  "Rod cutting": `public class Main {
+    public static void main(String[] args) {
+        int[] price = {0, 1, 5, 8, 9};                 // price[len]
+        int n = 4;
+        int[] dp = new int[n + 1];
+        for (int len = 1; len <= n; len++)
+            for (int cut = 1; cut <= len; cut++)
+                dp[len] = Math.max(dp[len], price[cut] + dp[len - cut]);
+        System.out.println("best = " + dp[n]);
+    }
+}`,
+
+  "Matrix chain order": `public class Main {
+    public static void main(String[] args) {
+        int[] dims = {10, 20, 30, 40};                 // 3 matrices
+        int n = dims.length - 1;
+        int[][] dp = new int[n][n];
+        for (int len = 2; len <= n; len++) {
+            for (int i = 0; i + len - 1 < n; i++) {
+                int j = i + len - 1;
+                dp[i][j] = 99999;
+                for (int k = i; k < j; k++) {
+                    int cost = dp[i][k] + dp[k + 1][j] + dims[i] * dims[k + 1] * dims[j + 1];
+                    if (cost < dp[i][j]) dp[i][j] = cost;
+                }
+            }
+        }
+        System.out.println("min = " + dp[0][n - 1]);
+    }
+}`
+});
+
+Object.assign(PRESETS["Backtracking"], {
+  "Rat in a maze": `public class Main {
+    static int[][] maze = {{0,0,1},{1,0,1},{0,0,0}};   // 1 = wall
+    static int[][] sol = new int[3][3];
+
+    static boolean walk(int r, int c) {
+        if (r < 0 || c < 0 || r > 2 || c > 2 || maze[r][c] == 1 || sol[r][c] == 1) return false;
+        sol[r][c] = 1;
+        if (r == 2 && c == 2) return true;
+        if (walk(r + 1, c) || walk(r, c + 1) || walk(r - 1, c) || walk(r, c - 1)) return true;
+        sol[r][c] = 0;                                  // undo
+        return false;
+    }
+    public static void main(String[] args) {
+        System.out.println("tới đích? " + walk(0, 0));
+    }
+}`,
+
+  "Sudoku 4×4": `public class Main {
+    // 0 = empty; a 4x4 grid uses 2x2 boxes
+    static int[][] board = {{1,0,3,4},{3,4,1,2},{2,1,4,3},{4,3,2,0}};
+
+    static boolean ok(int r, int c, int v) {
+        for (int i = 0; i < 4; i++) if (board[r][i] == v || board[i][c] == v) return false;
+        int br = (r / 2) * 2, bc = (c / 2) * 2;
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 2; j++) if (board[br + i][bc + j] == v) return false;
+        return true;
+    }
+    static boolean solve() {
+        for (int r = 0; r < 4; r++) {
+            for (int c = 0; c < 4; c++) {
+                if (board[r][c] != 0) continue;
+                for (int v = 1; v <= 4; v++) {
+                    if (!ok(r, c, v)) continue;
+                    board[r][c] = v;
+                    if (solve()) return true;
+                    board[r][c] = 0;                    // undo
+                }
+                return false;
+            }
+        }
+        return true;
+    }
+    public static void main(String[] args) {
+        System.out.println("giải được? " + solve());
+    }
+}`
+});
+
+Object.assign(COMPLEXITY, {
+  "Radix sort (LSD)": ["O(d·n)", "O(n + k)"],
+  "Bellman-Ford": ["O(V·E)", "O(V)"],
+  "A* on grid": ["O(E log V)", "O(V)"],
+  "Doubly linked list": ["O(n)", "O(1)"],
+  "Circular queue": ["O(1)", "O(n)"],
+  "Hash table (linear probing)": ["O(1) trung bình", "O(n)"],
+  "Trie (prefix tree)": ["O(L)", "O(A·N)"],
+  "Segment tree (sum)": ["O(log n)", "O(n)"],
+  "Fenwick tree (BIT)": ["O(log n)", "O(n)"],
+  "Subset sum": ["O(n·S)", "O(n·S)"],
+  "Rod cutting": ["O(n²)", "O(n)"],
+  "Matrix chain order": ["O(n³)", "O(n²)"],
+  "Rat in a maze": ["O(2^(n²))", "O(n²)"],
+  "Sudoku 4×4": ["O(9^m)", "O(1)"]
+});
+
+Object.assign(VIEW, {
+  "Counting sort": "table",              // the design moved this one to its dp view
+  "Radix sort (LSD)": "bars",
+  "Bellman-Ford": "graph",
+  "A* on grid": "table",
+  "Doubly linked list": "list",
+  "Circular queue": "linear",
+  "Hash table (linear probing)": "table",
+  "Trie (prefix tree)": "forest",
+  "Segment tree (sum)": "tree",
+  "Fenwick tree (BIT)": "table",
+  "Subset sum": "table",
+  "Rod cutting": "table",
+  "Matrix chain order": "table",
+  "Rat in a maze": "table",
+  "Sudoku 4×4": "table"
+});
+
+CATS.splice(CATS.findIndex(c => c[0] === "Two pointers"), 0,
+            ["Range queries", "Truy vấn đoạn / Range"]);

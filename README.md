@@ -30,7 +30,7 @@ java Visualizer.java --selftest   # compile + trace a bubble sort, assert the re
 node audit.js                 # server must be up: checks every algorithm's view
 ```
 
-`audit.js` loads the page's own decision layer with a DOM stub and traces all 54
+`audit.js` loads the page's own decision layer with a DOM stub and traces all 68
 algorithms: it fails if a view does not match its declaration in `presets.js`,
 changes shape mid-run, has no data, or throws on any step.
 
@@ -43,7 +43,7 @@ changes shape mid-run, has no data, or throws on any step.
 
 ## What you get
 
-**Home** — a catalog of 54 classic algorithms across 12 categories, generated
+**Home** — a catalog of 68 classic algorithms across 13 categories, generated
 from `presets.js` (add an entry there and the catalog picks it up automatically).
 
 The view kind is decided **once per run**, not per step, so the figure never
@@ -80,7 +80,7 @@ known — and the fallback for code you paste yourself.
 | any other `int[][]` | heat-mapped matrix |
 | `int[] tree` / `heap` (heap-encoded, `-1` = empty) | **binary tree** drawn by depth |
 | a node object with `left`/`right` | **binary tree** laid out in-order |
-| `int[] parent` (valid indices) | **disjoint-set forest**, one arrow per node to its parent |
+| `int[] parent` (valid indices) | **forest**: one arrow per node to its parent — a parallel char array names the nodes and a `used` counter hides slots not allocated yet, so a trie reads as letters |
 | array + a `top` counter, named `stack`/`stk` (or `X` beside `XTop`) | **stack** — only the live cells, growing upwards, the last tagged `top ↑` |
 | array + `head`/`tail`, named `queue`/`deque`, or a real `ArrayDeque` | **queue** — live cells left to right, ends tagged `front` / `rear` |
 | `String` | character boxes |
@@ -167,7 +167,7 @@ rebuilding the view.
 ```
 Visualizer.java   HTTP server + compiler + JDI tracer (single file, stdlib only)
 index.html        home page, visualizer UI, renderers
-presets.js        the 54 algorithms, grouped by category
+presets.js        the 68 algorithms, grouped by category, plus their view/complexity tables
 fonts.css fonts/  self-hosted JetBrains Mono + Space Grotesk (no CDN calls)
 ```
 

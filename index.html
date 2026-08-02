@@ -1058,8 +1058,27 @@ function drawFigure(figure, step, prev, pointers) {
   if (figure.kind === "queue") return drawLinear(stage, figure.data, before, [], "queue");
   const net = figure.kind === "graph" ? matrixGraph(figure.data, subLabels(step, figure.data.length))
             : figure.kind === "tree" ? (Array.isArray(figure.data) ? arrayTree(figure.data) : figure.data)
-            : figure.kind === "forest" ? parentForest(figure.data) : figure.data;
+            : figure.kind === "forest" ? parentForest(figure.data, nodeLabels(step, figure.data.length),
+                                                        allocated(step))
+            : figure.data;
   drawNet(stage, net, pointers.filter(p => NODE_POINTERS.includes(p.name)));
+}
+
+// a parallel array of characters/strings names the nodes (trie letters)
+function nodeLabels(step, n) {
+  const hit = Object.entries(step.vars).find(([, v]) =>
+    Array.isArray(v) && v.length === n
+    && v.some(x => typeof x === "string" && x.trim() && x !== "\u0000"));
+  return hit ? hit[1].map(x =>
+    (typeof x === "string" && x.trim() && x !== "\u0000") ? x : "") : null;
+}
+
+// how many slots of a pooled array are in use (a trie's `used` counter)
+function allocated(step) {
+  for (const name of ["used", "size", "count", "nodes"]) {
+    if (Number.isInteger(step.vars[name])) return step.vars[name];
+  }
+  return null;
 }
 
 function subLabels(step, n) {
@@ -1275,10 +1294,16 @@ function matrixGraph(m, sub) {
   }
   return { nodes, edges };
 }
-function parentForest(a) {
+/** parent[] as a forest: one arrow per node to its parent, roots have none.
+ *  `labels` names the nodes (a trie's letters); `n` hides slots not allocated yet. */
+function parentForest(a, labels, n) {
+  const size = Number.isInteger(n) ? Math.max(1, Math.min(n, a.length)) : a.length;
+  const live = a.slice(0, size);
   const edges = [];
-  a.forEach((p, i) => { if (p !== i) edges.push({ from: i, to: p, label: "", directed: true }); });
-  return { nodes: circleNodes(a.length, a.map((p, i) => p === i ? "root" : "")), edges };
+  live.forEach((p, i) => { if (p !== i && p < size) edges.push({ from: i, to: p, label: "", directed: true }); });
+  const nodes = circleNodes(size, live.map((p, i) => p === i ? "root" : "#" + i));
+  if (labels) nodes.forEach((node, i) => { if (labels[i]) node.label = labels[i]; });
+  return { nodes, edges };
 }
 function arrayTree(a) {
   const nodes = [], edges = [], byIndex = new Map();
