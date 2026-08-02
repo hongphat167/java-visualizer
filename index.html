@@ -147,6 +147,20 @@
   .trow { display: flex; gap: 4px; margin-bottom: 4px; align-items: center; }
   .thead { font-family: var(--mono); font-size: 12px; font-weight: 700; opacity: .75;
            text-align: center; flex: none; }
+  /* Guided tour. The ring is one absolutely positioned box whose huge spread
+     shadow dims everything outside it, so there is no clip-path or cut-out
+     geometry to keep in sync with the target. */
+  #tour { position: fixed; inset: 0; z-index: 50; }
+  #tourRing { position: absolute; border: 3px solid var(--cmp); border-radius: 4px;
+              box-shadow: 0 0 0 9999px rgba(16, 16, 16, .62);
+              transition: all .25s cubic-bezier(.4, 0, .2, 1); pointer-events: none; }
+  #tourBox { position: absolute; width: min(360px, calc(100vw - 32px)); background: var(--paper);
+             border: 3px solid var(--ink); box-shadow: 6px 6px 0 var(--ink); padding: 14px 16px 12px;
+             transition: all .25s cubic-bezier(.4, 0, .2, 1); }
+  #tourBox .tstep { font-family: var(--mono); font-size: 11px; opacity: .6; margin-bottom: 6px; }
+  #tourBox .tvi { font-weight: 700; line-height: 1.45; }
+  #tourBox .ten { font-size: 13px; opacity: .7; line-height: 1.4; margin-top: 4px; }
+  #tourBox .trow2 { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
   .ptr { color: var(--cmp); opacity: 1; }
   .legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 0 0;
             font-family: var(--mono); font-size: 11px; opacity: .8; }
@@ -265,15 +279,29 @@
           orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#101010"></path></marker>
 </defs></svg>
 
+<div id="tour" hidden>
+  <div id="tourRing"></div>
+  <div id="tourBox">
+    <div class="tstep" id="tourCount"></div>
+    <div class="tvi" id="tourVi"></div>
+    <div class="ten" id="tourEn"></div>
+    <div class="trow2">
+      <button class="btn" id="tourSkip" data-vi="Bỏ qua" data-en="Skip">Bỏ qua / Skip</button>
+      <button class="btn on" id="tourNext" data-vi="Tiếp" data-en="Next">Tiếp / Next</button>
+    </div>
+  </div>
+</div>
+
 <header>
   <div class="brand">
     <div class="logo">J</div>
     <div><b>JAVA·VIZ</b><small>ALGORITHM VISUALIZER</small></div>
   </div>
   <div class="nav">
-    <button class="btn" id="navHome">Trang chủ / Home</button>
+    <button class="btn" id="navHome" data-vi="Trang chủ" data-en="Home">Trang chủ / Home</button>
     <button class="btn" id="navViz">Visualizer</button>
     <button class="btn" id="navLang">VI + EN</button>
+    <button class="btn" id="navTour">? Hướng dẫn</button>
   </div>
 </header>
 
@@ -296,9 +324,9 @@
         PREVIEW · bubbleSort(int[] a)</div>
       <div class="bars" id="heroBars"></div>
       <div class="keys">
-        <span style="background:var(--base)">so sánh / compare</span>
-        <span style="background:var(--swap);color:#fff">hoán vị / swap</span>
-        <span style="background:var(--done)">đã xong / sorted</span>
+        <span style="background:var(--base)" data-vi="so sánh" data-en="compare">so sánh / compare</span>
+        <span style="background:var(--swap);color:#fff" data-vi="hoán vị" data-en="swap">hoán vị / swap</span>
+        <span style="background:var(--done)" data-vi="đã xong" data-en="sorted">đã xong / sorted</span>
       </div>
     </div>
   </div>
@@ -310,25 +338,25 @@
 <div class="viz" id="app" hidden>
   <div class="controls">
     <div class="grow-full">
-      <div class="lbl">NHÓM / CATEGORY</div>
+      <div class="lbl" data-vi="NHÓM" data-en="CATEGORY">NHÓM / CATEGORY</div>
       <div class="tabs" id="catTabs"></div>
     </div>
     <div class="grow-340">
-      <div class="lbl">THUẬT TOÁN / ALGORITHM</div>
+      <div class="lbl" data-vi="THUẬT TOÁN" data-en="ALGORITHM">THUẬT TOÁN / ALGORITHM</div>
       <div class="tabs" id="algoTabs"></div>
     </div>
     <div class="grow-260" id="inputWrap">
-      <div class="lbl" id="inputLabel">DỮ LIỆU / INPUT ARRAY</div>
+      <div class="lbl" id="inputLabel" data-vi="DỮ LIỆU" data-en="INPUT ARRAY">DỮ LIỆU / INPUT ARRAY</div>
       <div style="display:flex;gap:8px">
         <input type="text" id="input">
         <button class="btn" id="randomize" style="background:var(--done)">⟳</button>
       </div>
     </div>
     <div class="fix-130" id="targetWrap" hidden>
-      <div class="lbl" id="targetLabel">MỤC TIÊU / TARGET</div>
+      <div class="lbl" id="targetLabel" data-vi="MỤC TIÊU" data-en="TARGET">MỤC TIÊU / TARGET</div>
       <input type="text" id="target" style="width:100%;border:3px solid var(--ink);padding:10px;font-family:var(--mono);font-size:13px;background:var(--paper)">
     </div>
-    <button class="run" id="build">Áp dụng / Run</button>
+    <button class="run" id="build" data-vi="Áp dụng" data-en="Run">Áp dụng / Run</button>
   </div>
 
   <div class="grid">
@@ -351,12 +379,12 @@
 
       <div class="pair">
         <div class="note">
-          <div class="lbl">ĐANG XẢY RA / WHAT'S HAPPENING</div>
+          <div class="lbl" data-vi="ĐANG XẢY RA" data-en="WHAT'S HAPPENING">ĐANG XẢY RA / WHAT'S HAPPENING</div>
           <div class="vi" id="noteVi">Nhấn ▶ Chạy để bắt đầu.</div>
           <div class="en" id="noteEn"></div>
         </div>
         <div class="vars">
-          <div class="lbl">BIẾN / VARIABLES</div>
+          <div class="lbl" data-vi="BIẾN" data-en="VARIABLES">BIẾN / VARIABLES</div>
           <div class="set" id="vars"></div>
         </div>
       </div>
@@ -367,8 +395,8 @@
         <div class="file">
           <span id="fileName">Main.java</span>
           <span style="display:flex;gap:6px">
-            <button id="editToggle" class="ebtn">✎ SỬA CODE / EDIT</button>
-            <button id="restoreCode" class="ebtn" hidden>KHÔI PHỤC</button>
+            <button id="editToggle" class="ebtn" data-vi="✎ SỬA CODE" data-en="EDIT">✎ SỬA CODE / EDIT</button>
+            <button id="restoreCode" class="ebtn" data-vi="KHÔI PHỤC" data-en="RESTORE" hidden>KHÔI PHỤC</button>
           </span>
         </div>
         <div class="editor" id="editor" hidden>
@@ -377,18 +405,18 @@
             the current step's line number.</div>
           <textarea id="draft" spellcheck="false"></textarea>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button id="saveCode" class="ebtn save">LƯU / SAVE</button>
-            <button id="cancelEdit" class="ebtn cancel">HUỶ / CANCEL</button>
+            <button id="saveCode" class="ebtn save" data-vi="LƯU" data-en="SAVE">LƯU / SAVE</button>
+            <button id="cancelEdit" class="ebtn cancel" data-vi="HUỶ" data-en="CANCEL">HUỶ / CANCEL</button>
           </div>
         </div>
         <div class="lines" id="codeLines"></div>
       </div>
       <div class="stats">
-        <div class="lbl">ĐỘ PHỨC TẠP / COMPLEXITY</div>
+        <div class="lbl" data-vi="ĐỘ PHỨC TẠP" data-en="COMPLEXITY">ĐỘ PHỨC TẠP / COMPLEXITY</div>
         <div class="grid2" id="stats"></div>
       </div>
       <div class="log">
-        <div class="head">NHẬT KÝ / STEP LOG</div>
+        <div class="head" data-vi="NHẬT KÝ" data-en="STEP LOG">NHẬT KÝ / STEP LOG</div>
         <div class="list" id="log"></div>
       </div>
     </div>
@@ -445,7 +473,7 @@ function buildHome() {
         <span class="big">${big}</span></div>
       <div><div class="vi">${esc(vi)}</div><div class="en">${esc(en)} · ${items.length} bài</div></div>
       <div class="items">${items.map(esc).join(" · ")}</div>
-      <button data-open="${esc(items[0])}">▶ Chạy thử / Try it</button>
+      <button data-open="${esc(items[0])}">${esc(bi("▶ Chạy thử", "▶ Try it"))}</button>
     </div>`;
   }).join("");
   // popin, staggered, on everything the hero and the catalog are made of
@@ -513,9 +541,24 @@ $("navHome").onclick = () => openAlgo(null);
 $("navViz").onclick = () => openAlgo(algo);
 $("ctaOpen").onclick = () => openAlgo(algo);
 $("ctaBubble").onclick = () => openAlgo("Bubble sort");
+// The language switch used to reach only the narration, so picking VI still left
+// every button, label and legend reading "Tiếng Việt / English". Static labels
+// carry data-vi/data-en; anything built in JS goes through bi().
+function bi(vi, en) {
+  return lang === "vi" ? vi : lang === "en" ? en : vi + " / " + en;
+}
+function applyLang() {
+  for (const el of document.querySelectorAll("[data-vi]")) {
+    el.textContent = bi(el.dataset.vi, el.dataset.en);
+  }
+  $("navLang").textContent = lang === "both" ? "VI + EN" : lang.toUpperCase();
+  $("play").textContent = timer ? bi("❚❚ Tạm dừng", "❚❚ Pause") : bi("▶ Chạy", "▶ Play");
+  syncControls();
+  buildHome();                       // the catalog cards are built in JS too
+}
 $("navLang").onclick = () => {
   lang = lang === "both" ? "vi" : lang === "vi" ? "en" : "both";
-  $("navLang").textContent = lang === "both" ? "VI + EN" : lang.toUpperCase();
+  applyLang();
   if (steps.length) render();
 };
 addEventListener("hashchange", route);
@@ -537,7 +580,7 @@ function syncControls() {
   $("targetWrap").hidden = target === null;
   $("targetLabel").textContent = targetSpec()[1];
   $("target").value = target === null ? "" : target;
-  $("fileName").textContent = "Main.java" + (userCode[algo] ? " · CODE CỦA BẠN" : "");
+  $("fileName").textContent = "Main.java" + (userCode[algo] ? " · " + bi("CODE CỦA BẠN", "YOUR CODE") : "");
   $("restoreCode").hidden = !userCode[algo];
 }
 $("catTabs").onclick = e => {
@@ -559,7 +602,7 @@ $("build").onclick = build;
 function setEditing(on) {
   $("editor").hidden = !on;
   $("codeLines").hidden = on;
-  $("editToggle").textContent = on ? "ĐANG SỬA" : "✎ SỬA CODE / EDIT";
+  $("editToggle").textContent = on ? bi("ĐANG SỬA", "EDITING") : bi("✎ SỬA CODE", "✎ EDIT");
   $("editToggle").classList.toggle("on", on);
 }
 $("editToggle").onclick = () => {
@@ -639,7 +682,7 @@ addEventListener("resize", () => { if (steps.length) render(); });
 
 function play() {
   if (at >= steps.length - 1) at = 0;
-  $("play").textContent = "❚❚ Tạm dừng";
+  $("play").textContent = bi("❚❚ Tạm dừng", "❚❚ Pause");
   $("play").classList.add("playing");
   timer = setInterval(() => {
     if (at >= steps.length - 1) { stop(); return; }
@@ -650,7 +693,7 @@ function play() {
 function stop() {
   clearInterval(timer);
   timer = null;
-  $("play").textContent = "▶ Chạy";
+  $("play").textContent = bi("▶ Chạy", "▶ Play");
   $("play").classList.remove("playing");
 }
 
@@ -694,6 +737,7 @@ async function build() {
     // Open paused. Autoplay started before the learner had read the code, and the
     // run was over by the time they looked up; ▶ is one click away.
     pendingStep = null;
+    tourMaybeAutoStart();       // first visit only; the ? button reopens it later
   } finally {
     running = false;
   }
@@ -1062,9 +1106,9 @@ function drawLegend(figure, pointers) {
   const shown = flat ? pointers.filter(p => ROW_POINTERS.includes(p.name) || COL_POINTERS.includes(p.name))
                      : pointers;
   const keys = shown.map(p => p.name).join(" ");
-  const items = [[PAL.swap, "vừa thay đổi / changed"], [PAL.cmp, "đang xét / current"]];
-  if (figure.kind === "bars" || figure.kind === "graph") items.push([PAL.done, "đã xong / settled"]);
-  if (keys) items.push([null, "con trỏ / pointers: " + keys]);
+  const items = [[PAL.swap, bi("vừa thay đổi", "changed")], [PAL.cmp, bi("đang xét", "current")]];
+  if (figure.kind === "bars" || figure.kind === "graph") items.push([PAL.done, bi("đã xong", "settled")]);
+  if (keys) items.push([null, bi("con trỏ", "pointers") + ": " + keys]);
   $("legend").innerHTML = items.map(([c, text]) =>
     `<span>${c ? `<i style="background:${c}"></i>` : ""}${esc(text)}</span>`).join("");
 }
@@ -1298,7 +1342,7 @@ function drawLinear(stage, data, before, pointers, role) {
       box.style.color = "";
       tag.className = "tag hint";
       tag.textContent = i === 0
-        ? (role === "queue" ? "hàng đợi rỗng / empty" : "ngăn xếp rỗng / empty") : "";
+        ? (role === "queue" ? bi("hàng đợi rỗng", "empty queue") : bi("ngăn xếp rỗng", "empty stack")) : "";
       return;
     }
     const v = data[i];
@@ -1600,6 +1644,92 @@ function fmt(v) {
 }
 function esc(s) {
   return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+/* ---------------- guided tour ---------------- */
+
+// Everything the tour points at already exists on the page, so a step is just a
+// target id and two lines of copy. Steps whose target is hidden — the input box
+// on an algorithm that has none — are skipped rather than pointed at nothing.
+const TOUR = [
+  ["catTabs", "Chọn nhóm rồi chọn thuật toán. Có 68 cái, chia 13 nhóm.",
+              "Pick a category, then an algorithm. 68 of them across 13 groups."],
+  ["stage", "Đây là hình. Nó vẽ đúng một biến trong code — tên biến và kích thước ghi ngay trên tiêu đề.",
+            "The figure. It follows one variable from the code; the title names it and its size."],
+  ["legend", "Màu có nghĩa: vàng là ô đang xét, đỏ là ô vừa đổi giá trị, xanh là phần đã xong.",
+             "The colours mean something: current cell, cell that just changed, part already settled."],
+  ["play", "Bấm để chạy. Trang mở ra ở trạng thái dừng nên bạn kịp đọc code trước.",
+           "Press play. The page opens paused so you can read the code first."],
+  ["scrub", "Kéo để nhảy tới bước bất kỳ. Nút ◀ ▶ đi từng bước một.",
+            "Drag to jump to any step. The arrows move one step at a time."],
+  ["inputWrap", "Đổi dữ liệu đầu vào rồi chạy lại. Nút ⟳ sinh mảng ngẫu nhiên.",
+                "Change the input and run again. The ⟳ button makes a random array."],
+  ["codeLines", "Dòng code đang chạy được tô sáng theo đúng bước hiện tại.",
+                "The line being executed right now is highlighted."],
+  ["vars", "Giá trị mọi biến ở bước này. Con trỏ như i, j cũng hiện tên ngay trên hình.",
+           "Every variable at this step. Pointers like i and j are also tagged on the figure."],
+  ["editToggle", "Sửa được code Java ngay tại đây, hoặc dán code của bạn vào rồi xem nó chạy.",
+                 "Edit the Java here, or paste your own and watch it run."],
+];
+
+let tourAt = 0;
+const tourVisible = el => el && !el.hidden && el.getBoundingClientRect().width > 0;
+
+function tourShow() {
+  while (tourAt < TOUR.length && !tourVisible($(TOUR[tourAt][0]))) tourAt++;
+  if (tourAt >= TOUR.length) return tourEnd();
+
+  const [id, vi, en] = TOUR[tourAt];
+  const el = $(id);
+  // Instant, not smooth: an instant scroll settles layout synchronously, so the
+  // rect below is already the final one. A smooth scroll left the ring measuring
+  // mid-animation and landing off-screen above its target.
+  el.scrollIntoView({ block: "center" });
+
+  const ring = $("tourRing"), box = $("tourBox");
+  // not bi(): "BƯỚC / STEP 1 / 9" has one slash too many to read
+  $("tourCount").textContent = `${lang === "en" ? "STEP" : "BƯỚC"} ${tourAt + 1} / ${TOUR.length}`;
+  // in a single-language mode the second line would just repeat the first
+  $("tourVi").textContent = lang === "en" ? en : vi;
+  $("tourEn").textContent = lang === "both" ? en : "";
+  $("tourNext").textContent = tourAt === TOUR.length - 1 ? bi("Xong", "Done") : bi("Tiếp", "Next");
+
+  const r = el.getBoundingClientRect(), pad = 6;
+  ring.style.left = (r.left - pad) + "px";
+  ring.style.top = (r.top - pad) + "px";
+  ring.style.width = (r.width + pad * 2) + "px";
+  ring.style.height = (r.height + pad * 2) + "px";
+
+  // below the target when there is room, otherwise above; measured after the text
+  // is in place so offsetHeight reflects this step's copy
+  const h = box.offsetHeight || 160, below = r.bottom + 14;
+  box.style.top = (below + h < innerHeight ? below : Math.max(12, r.top - h - 14)) + "px";
+  box.style.left = Math.min(Math.max(12, r.left), innerWidth - box.offsetWidth - 12) + "px";
+}
+function tourStart() {
+  if ($("app").hidden) { openAlgo(algo || "Bubble sort"); }   // the tour needs the viz view
+  // Marked as seen on open, not on finish: someone who skips halfway does not
+  // want it again on every algorithm they click.
+  try { localStorage.setItem("vizTourSeen", "1"); } catch (e) { /* private mode */ }
+  tourAt = 0;
+  $("tour").hidden = false;
+  tourShow();
+}
+function tourEnd() { $("tour").hidden = true; }
+$("navTour").onclick = tourStart;
+$("tourSkip").onclick = tourEnd;
+$("tourNext").onclick = () => { tourAt++; tourShow(); };
+addEventListener("keydown", e => {
+  if ($("tour").hidden) return;
+  if (e.key === "Escape") tourEnd();
+  if (e.key === "Enter" || e.key === "ArrowRight") { tourAt++; tourShow(); }
+});
+addEventListener("resize", () => { if (!$("tour").hidden) tourShow(); });
+
+function tourMaybeAutoStart() {
+  let seen = "1";
+  try { seen = localStorage.getItem("vizTourSeen"); } catch (e) { /* private mode: stay quiet */ }
+  if (!seen) setTimeout(tourStart, 600);
 }
 
 buildHome();
