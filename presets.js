@@ -968,3 +968,87 @@ public class Main {
 }`
   }
 };
+
+// Per-algorithm metadata for the design's COMPLEXITY card and the category tabs:
+// [average time, space]. Category and file name are derived from the group.
+const COMPLEXITY = {
+  "Bubble sort": ["O(n²)", "O(1)"],
+  "Selection sort": ["O(n²)", "O(1)"],
+  "Insertion sort": ["O(n²)", "O(1)"],
+  "Merge sort": ["O(n log n)", "O(n)"],
+  "Quick sort (Lomuto)": ["O(n log n)", "O(log n)"],
+  "Heap sort": ["O(n log n)", "O(1)"],
+  "Counting sort": ["O(n + k)", "O(k)"],
+
+  "Linear search": ["O(n)", "O(1)"],
+  "Binary search": ["O(log n)", "O(1)"],
+  "Binary search on answer (sqrt)": ["O(log n)", "O(1)"],
+  "Two pointers — pair sum": ["O(n)", "O(1)"],
+  "Sliding window — longest substring": ["O(n)", "O(k)"],
+  "Sliding window — max sum of k": ["O(n)", "O(1)"],
+
+  "Kadane — max subarray": ["O(n)", "O(1)"],
+  "Prefix sums — range query": ["O(n)", "O(n)"],
+  "Dutch national flag (sort 0/1/2)": ["O(n)", "O(1)"],
+  "Reverse & rotate in place": ["O(n)", "O(1)"],
+  "Remove duplicates (sorted)": ["O(n)", "O(1)"],
+  "Moore majority vote": ["O(n)", "O(1)"],
+
+  "Palindrome check": ["O(n)", "O(1)"],
+  "Anagram check": ["O(n)", "O(1)"],
+  "KMP — prefix function": ["O(n)", "O(n)"],
+  "Reverse words": ["O(n)", "O(1)"],
+
+  "Reverse a linked list": ["O(n)", "O(1)"],
+  "Floyd cycle detection": ["O(n)", "O(1)"],
+  "Merge two sorted lists": ["O(n + m)", "O(1)"],
+
+  "Balanced parentheses": ["O(n)", "O(n)"],
+  "Monotonic stack — next greater": ["O(n)", "O(n)"],
+  "Queue via two stacks": ["O(1) khấu hao", "O(n)"],
+
+  "BST insert & search": ["O(h)", "O(h)"],
+  "Inorder traversal (array tree)": ["O(n)", "O(h)"],
+  "Level order (BFS on array tree)": ["O(n)", "O(n)"],
+  "Tree height": ["O(n)", "O(h)"],
+
+  "BFS on grid": ["O(V + E)", "O(V)"],
+  "DFS on adjacency matrix": ["O(V²)", "O(V)"],
+  "Dijkstra (adjacency matrix)": ["O(V²)", "O(V)"],
+  "Topological sort (Kahn)": ["O(V + E)", "O(V)"],
+  "Union-Find (DSU)": ["O(α(n))", "O(n)"],
+  "Floyd-Warshall": ["O(V³)", "O(V²)"],
+
+  "Fibonacci (recursion)": ["O(2ⁿ)", "O(n)"],
+  "Fibonacci (memoised)": ["O(n)", "O(n)"],
+  "0/1 Knapsack": ["O(n·W)", "O(n·W)"],
+  "Longest common subsequence": ["O(n·m)", "O(n·m)"],
+  "Edit distance": ["O(n·m)", "O(n·m)"],
+  "Coin change (min coins)": ["O(n·A)", "O(A)"],
+  "Longest increasing subsequence": ["O(n²)", "O(n)"],
+  "Climbing stairs": ["O(n)", "O(n)"],
+
+  "N-Queens (4×4)": ["O(n!)", "O(n)"],
+  "Subsets (power set)": ["O(2ⁿ)", "O(n)"],
+  "Permutations": ["O(n!)", "O(n)"],
+
+  "GCD (Euclid)": ["O(log n)", "O(1)"],
+  "Sieve of Eratosthenes": ["O(n log log n)", "O(n)"],
+  "Fast power (binary exponentiation)": ["O(log n)", "O(1)"],
+  "Prime check (trial division)": ["O(√n)", "O(1)"]
+};
+
+// The design's category tab row: id + "Vietnamese / English" label.
+const CATS = [
+  ["Sorting", "Sắp xếp / Sorting"],
+  ["Searching", "Tìm kiếm / Search"],
+  ["Arrays", "Mảng / Arrays"],
+  ["Strings", "Chuỗi / Strings"],
+  ["Linked list", "Danh sách / Linked list"],
+  ["Stack & queue", "Cấu trúc / Structures"],
+  ["Trees", "Cây / Trees"],
+  ["Graphs", "Đồ thị / Graph"],
+  ["Dynamic programming", "QHĐ / DP"],
+  ["Backtracking", "Đệ quy / Backtracking"],
+  ["Math", "Toán / Math"]
+];

@@ -6,208 +6,219 @@
 <title>JAVA·VIZ — Algorithm Visualizer</title>
 <link rel="stylesheet" href="fonts.css">
 <style>
+  /* Tokens taken verbatim from the design file (PAL0 + chrome). */
   :root {
-    --paper: #FFF6E5; --ink: #101010; --card: #ffffff;
-    --blue: #2B4EFF; --yellow: #FFD84D; --orange: #FF6B4A; --lime: #A8E10C;
-    --rule: #EDE3CC;
+    --paper: #FFF6E5; --ink: #101010; --rule: #EDE3CC;
+    --base: #FFD84D; --cmp: #2B4EFF; --swap: #FF6B4A; --done: #A8E10C;
+    --pivot: #C77DFF; --sky: #7ED9F0; --rose: #FFB3C7; --soft: #FFF0B8;
     --sans: 'Space Grotesk', Helvetica, sans-serif;
-    --mono: 'JetBrains Mono', ui-monospace, monospace;
-    --dur: 200ms;
-    --ease: cubic-bezier(.4, 0, .2, 1);
+    --mono: 'JetBrains Mono', monospace;
+    --dur: 220ms; --ease: cubic-bezier(.4, 0, .2, 1);
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 14px; }
-  ::selection { background: var(--yellow); }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: var(--paper); }
+  body { color: var(--ink); font-family: var(--sans); font-size: 14px; }
+  ::selection { background: var(--base); }
+  input, select, button { font-family: inherit; }
 
-  /* ---- brutalist primitives ---- */
-  .card { border: 4px solid var(--ink); background: var(--card); box-shadow: 8px 8px 0 var(--ink); }
-  .card > .head { border-bottom: 3px solid var(--ink); padding: 10px 16px; display: flex;
-                  align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-                  font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 1px; }
-  .card > .body { padding: 16px; }
-  button, select, input { font-family: inherit; font-size: 14px; color: var(--ink); }
-  button { border: 3px solid var(--ink); background: var(--card); font-weight: 700;
-           padding: 9px 14px; cursor: pointer; box-shadow: 4px 4px 0 var(--ink);
-           transition: transform var(--dur) var(--ease), background var(--dur) var(--ease); }
-  button:hover:not(:disabled) { background: var(--lime); }
-  button:active:not(:disabled) { transform: translate(4px, 4px); box-shadow: none; }
-  button:disabled { opacity: .35; cursor: default; box-shadow: 4px 4px 0 rgba(16,16,16,.3); }
-  button.primary { background: var(--blue); color: #fff; }
-  button.primary:hover { background: var(--ink); color: var(--yellow); }
-  button.sq { width: 46px; padding: 0; height: 46px; font-size: 16px; }
-  select, input[type=text] { border: 3px solid var(--ink); background: var(--paper);
-                             padding: 9px 10px; font-family: var(--mono); font-size: 12px; font-weight: 700; }
-  input[type=range] { accent-color: var(--blue); height: 46px; }
   .mono { font-family: var(--mono); }
-  .tag { border: 2px solid var(--ink); padding: 3px 8px; font-family: var(--mono);
-         font-size: 11px; font-weight: 700; }
+  .lbl { font-family: var(--mono); font-size: 11px; font-weight: 700;
+         letter-spacing: 1px; margin-bottom: 8px; }
+  .card { border: 4px solid var(--ink); background: #fff; box-shadow: 8px 8px 0 var(--ink); }
+  .btn { border: 3px solid var(--ink); background: #fff; padding: 9px 14px;
+         font-family: var(--mono); font-size: 12px; font-weight: 700; cursor: pointer;
+         box-shadow: 4px 4px 0 var(--ink); transition: background var(--dur) var(--ease); }
+  .btn:hover { background: var(--done); }
+  .btn:active { transform: translate(4px, 4px); box-shadow: none; }
+  .btn.on { background: var(--base); }
+  .btn.dark { background: var(--ink); color: var(--base); }
 
-  /* ---- shell ---- */
-  header { display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
-           justify-content: space-between; padding: 14px 24px; border-bottom: 4px solid var(--ink);
-           background: var(--paper); position: sticky; top: 0; z-index: 5; }
+  /* ---- header ---- */
+  header { display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+           justify-content: space-between; padding: 14px 24px; border-bottom: 4px solid var(--ink); }
   .brand { display: flex; align-items: center; gap: 12px; }
-  .logo { width: 38px; height: 38px; border: 3px solid var(--ink); background: var(--blue);
-          box-shadow: 4px 4px 0 var(--ink); display: grid; place-items: center;
-          color: #fff; font-weight: 700; font-size: 20px; }
-  .brand b { font-size: 20px; letter-spacing: -.5px; line-height: 1; display: block; }
+  .logo { width: 38px; height: 38px; border: 3px solid var(--ink); background: var(--cmp);
+          box-shadow: 4px 4px 0 var(--ink); display: flex; align-items: center;
+          justify-content: center; color: #fff; font-weight: 700; font-size: 20px; }
+  .brand b { display: block; font-weight: 700; font-size: 20px; letter-spacing: -.5px; line-height: 1; }
   .brand small { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; opacity: .7; }
-  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-  .status { font-family: var(--mono); font-size: 12px; font-weight: 700; }
-
-  main { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.35fr);
-         gap: 22px; padding: 22px 24px 60px; max-width: 1560px; margin: 0 auto; align-items: start; }
-  .col { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
-  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
-
-  /* ---- editor / code ---- */
-  .dark { background: var(--ink); }
-  .dark > .head { border-bottom: 3px solid var(--yellow); color: var(--yellow); }
-  textarea { width: 100%; height: 46vh; min-height: 320px; border: 0; resize: vertical;
-             background: var(--ink); color: #f4f1e8; padding: 12px 14px;
-             font-family: var(--mono); font-size: 12.5px; line-height: 1.6; }
-  textarea:focus { outline: 2px solid var(--yellow); outline-offset: -2px; }
-  .codelines { padding: 12px 0; max-height: 44vh; overflow: auto; }
-  .codelines div { display: flex; gap: 12px; padding: 3px 14px;
-                   transition: background var(--dur) var(--ease); }
-  .codelines div.on { background: #3a3410; }
-  .codelines div.on .txt { color: var(--yellow); }
-  .codelines .n { font-family: var(--mono); font-size: 12px; color: #5a5a5a;
-                  width: 26px; text-align: right; flex: none; }
-  .codelines .txt { font-family: var(--mono); font-size: 12.5px; color: #d9d5c8; white-space: pre; }
-
-  /* ---- narration ---- */
-  .note { background: var(--blue); color: #fff; }
-  .note .vi { font-size: 19px; font-weight: 700; line-height: 1.3; min-height: 50px; }
-  .note .vi code { font-family: var(--mono); font-size: 16px; background: rgba(255,255,255,.16);
-                   padding: 1px 6px; }
-  .note .en { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; opacity: .85; margin-top: 8px; }
-
-  /* ---- figures ---- */
-  .viz + .viz { margin-top: 22px; padding-top: 18px; border-top: 3px solid var(--rule); }
-  .viz-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
-  .viz-head b { font-size: 16px; letter-spacing: -.3px; }
-  .viz-head .type { font-family: var(--mono); font-size: 11px; opacity: .6; }
-  .legend { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
-
-  .plot { display: flex; align-items: flex-end; gap: 6px; height: 240px;
-          border-bottom: 3px solid var(--ink); }
-  .col-bar { flex: 1 1 0; min-width: 12px; max-width: 78px; height: 100%;
-             display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
-             transition: opacity var(--dur) var(--ease); }
-  .col-bar.out { opacity: .3; }
-  .col-bar .v { font-family: var(--mono); font-size: 11px; font-weight: 700; margin-bottom: 4px; }
-  .bar { width: 100%; border: 3px solid var(--ink); border-bottom: none; background: var(--yellow);
-         transition: height var(--dur) var(--ease), background var(--dur) var(--ease); }
-  .axis { display: flex; gap: 6px; padding-top: 5px; }
-  .axis div { flex: 1 1 0; min-width: 12px; max-width: 78px; text-align: center;
-              font-family: var(--mono); font-size: 10px; opacity: .55; }
-
-  .seq { overflow-x: auto; padding-bottom: 2px; }
-  .row { display: flex; gap: 6px; width: max-content; }
-  .box { width: 46px; flex: 0 0 46px; height: 52px; border: 3px solid var(--ink); background: var(--card);
-         display: flex; flex-direction: column; align-items: center; justify-content: center;
-         font-family: var(--mono); font-size: 14px; font-weight: 700;
-         transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
-                     opacity var(--dur) var(--ease); }
-  .box.wide { width: auto; flex: 0 0 auto; min-width: 46px; padding: 0 10px; }
-  .box small { font-size: 9px; font-weight: 400; opacity: .55; }
-  .box.on { background: var(--blue); color: #fff; }
-  .box.on small { opacity: .8; }
-  .box.out { opacity: .3; }
-
-  .lane { position: relative; height: 22px; margin-top: 6px; }
-  .ptr { position: absolute; top: 0; left: 0; text-align: center; border: 2px solid var(--ink);
-         font-family: var(--mono); font-size: 10px; font-weight: 700; line-height: 16px;
-         transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
-         white-space: nowrap; }
-
-  /* node-link view for graphs and trees */
-  .netsvg { width: 100%; height: 360px; display: block; border-bottom: 3px solid var(--ink); }
-  .netsvg circle { transition: fill var(--dur) var(--ease); }
-  .netsvg text { pointer-events: none; }
-
-  .matrix { display: grid; gap: 4px; width: max-content; }
-  .mcell { width: 38px; height: 38px; display: grid; place-items: center; border: 3px solid var(--ink);
-           font-family: var(--mono); font-size: 12px; font-weight: 700;
-           transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
-
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .chip { border: 3px solid var(--ink); background: var(--paper); padding: 8px 10px;
-          font-family: var(--mono); font-size: 13px; min-width: 64px; }
-  .chip .k { opacity: .6; font-size: 11px; display: block; }
-  .chip .v { font-weight: 700; font-size: 15px; }
-  .spark { display: flex; align-items: flex-end; gap: 1px; height: 16px; margin-top: 4px; }
-  .spark span { width: 3px; background: var(--ink); opacity: .25;
-                transition: height var(--dur) var(--ease); }
-  .spark span:last-child { background: var(--blue); opacity: 1; }
-
-  /* ---- log ---- */
-  .log { max-height: 300px; overflow: auto; }
-  .log div { border-bottom: 2px solid var(--rule); padding: 9px 14px; display: flex; gap: 10px; }
-  .log div.now { background: var(--yellow); }
-  .log .n { font-family: var(--mono); font-size: 11px; font-weight: 700; opacity: .5; flex: none; }
-  .log .vi { font-size: 13.5px; line-height: 1.45; }
-  .log .en { display: block; font-family: var(--mono); font-size: 11.5px; opacity: .6; }
-
-  .stack div { border-bottom: 2px solid var(--rule); padding: 6px 0; font-family: var(--mono); font-size: 12.5px; }
-  .out-text { border: 3px solid var(--ink); background: var(--lime); padding: 10px 12px;
-              font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; font-weight: 700; }
-  .err { border: 3px solid var(--ink); background: var(--orange); color: #fff; padding: 10px 12px;
-         font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; }
+  .nav { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 
   /* ---- home ---- */
   .home { max-width: 1240px; margin: 0 auto; padding: 48px 24px 80px; }
   .hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
           gap: 32px; align-items: center; margin-bottom: 56px; }
-  .badge { display: inline-block; border: 3px solid var(--ink); background: var(--orange);
+  .badge { display: inline-block; border: 3px solid var(--ink); background: var(--swap);
            color: #fff; padding: 6px 12px; font-family: var(--mono); font-size: 11px;
            font-weight: 700; letter-spacing: 1px; margin-bottom: 18px; }
   .hero h1 { font-size: clamp(38px, 6vw, 68px); line-height: .95; letter-spacing: -2.5px;
              margin: 0 0 18px; text-wrap: balance; }
-  .hero p.lead { font-size: 17px; line-height: 1.55; max-width: 52ch; margin: 0 0 12px; }
-  .hero p.sub { font-family: var(--mono); font-size: 13px; line-height: 1.6;
-                max-width: 56ch; margin: 0 0 28px; opacity: .72; }
-  .hero .cta { display: flex; flex-wrap: wrap; gap: 14px; }
-  .hero .cta button { padding: 16px 26px; font-size: 16px; box-shadow: 6px 6px 0 var(--ink); }
+  .hero .lead { font-size: 17px; line-height: 1.55; max-width: 52ch; margin: 0 0 12px; text-wrap: pretty; }
+  .hero .sub { font-family: var(--mono); font-size: 13px; line-height: 1.6;
+               max-width: 56ch; margin: 0 0 28px; opacity: .72; }
+  .cta { display: flex; flex-wrap: wrap; gap: 14px; }
+  .cta button { border: 3px solid var(--ink); padding: 16px 26px; font-size: 16px;
+                font-weight: 700; cursor: pointer; box-shadow: 6px 6px 0 var(--ink); background: #fff; }
+  .cta button.blue { background: var(--cmp); color: #fff; }
+  .cta button:hover { background: var(--done); color: var(--ink); }
   .preview { border: 4px solid var(--ink); background: #fff; box-shadow: 10px 10px 0 var(--ink); padding: 22px; }
   .preview .bars { display: flex; align-items: flex-end; gap: 8px; height: 190px;
                    border-bottom: 3px solid var(--ink); }
-  .preview .bars div { flex: 1; border: 3px solid var(--ink); border-bottom: none;
-                       animation: grow 2.4s var(--ease) infinite alternate; }
-  @keyframes grow { from { transform: scaleY(.72); transform-origin: bottom } to { transform: none } }
-  .preview .keys { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
-
-  .section-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
-                  border-top: 4px solid var(--ink); padding-top: 18px; margin-bottom: 24px; }
-  .section-head h2 { font-size: 30px; letter-spacing: -1px; }
-  .section-head span { font-family: var(--mono); font-size: 13px; opacity: .65; }
+  .preview .bars div { flex: 1; border: 3px solid var(--ink); border-bottom: none; }
+  .preview .keys { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;
+                   font-family: var(--mono); font-size: 11px; }
+  .preview .keys span { border: 2px solid var(--ink); padding: 4px 8px; }
+  .sect { display: flex; align-items: baseline; gap: 14px; border-top: 4px solid var(--ink);
+          padding-top: 18px; margin-bottom: 24px; flex-wrap: wrap; }
+  .sect h2 { font-size: 30px; letter-spacing: -1px; }
+  .sect span { font-family: var(--mono); font-size: 13px; opacity: .65; }
   .catalog { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 22px; }
   .cat { border: 4px solid var(--ink); box-shadow: 8px 8px 0 var(--ink); padding: 20px;
-         display: flex; flex-direction: column; gap: 14px; }
+         display: flex; flex-direction: column; gap: 14px; min-height: 230px; }
   .cat .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
   .cat .icon { width: 34px; height: 34px; border: 3px solid var(--ink); background: #fff;
-               display: grid; place-items: center; font-family: var(--mono); font-weight: 700; }
-  .cat h3 { font-size: 21px; font-weight: 700; line-height: 1.1; letter-spacing: -.5px; }
+               font-family: var(--mono); font-weight: 700; display: flex;
+               align-items: center; justify-content: center; }
+  .cat .big { border: 2px solid var(--ink); background: #fff; padding: 3px 8px;
+              font-family: var(--mono); font-size: 11px; font-weight: 700; }
+  .cat .vi { font-size: 21px; font-weight: 700; line-height: 1.1; letter-spacing: -.5px; }
   .cat .en { font-family: var(--mono); font-size: 12px; opacity: .7; margin-top: 3px; }
-  .cat ul { list-style: none; font-family: var(--mono); font-size: 12px; line-height: 1.9; }
-  .cat ul button { all: unset; cursor: pointer; border-bottom: 2px solid transparent; }
-  .cat ul button:hover { border-bottom-color: var(--ink); }
-  .cat > button { margin-top: auto; }
+  .cat .items { font-family: var(--mono); font-size: 12px; line-height: 1.7; }
+  .cat > button { margin-top: auto; border: 3px solid var(--ink); background: var(--ink);
+                  color: var(--base); padding: 11px; font-weight: 700; font-size: 13px; cursor: pointer; }
+
+  /* ---- visualizer ---- */
+  .viz { padding: 20px 24px 60px; max-width: 1440px; margin: 0 auto; }
+  .controls { border: 4px solid var(--ink); background: #fff; box-shadow: 8px 8px 0 var(--ink);
+              padding: 16px; margin-bottom: 22px; display: flex; flex-wrap: wrap;
+              gap: 18px; align-items: flex-end; }
+  .controls .tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+  .grow-full { flex: 1 1 100%; }
+  .grow-340 { flex: 1 1 340px; }
+  .grow-260 { flex: 1 1 260px; }
+  .fix-130 { flex: 0 0 130px; }
+  .controls input[type=text] { flex: 1; min-width: 0; border: 3px solid var(--ink); padding: 10px;
+                               font-family: var(--mono); font-size: 13px; background: var(--paper); }
+  .run { border: 3px solid var(--ink); background: var(--cmp); color: #fff; padding: 12px 20px;
+         font-weight: 700; font-size: 14px; cursor: pointer; box-shadow: 5px 5px 0 var(--ink); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+          gap: 22px; align-items: start; }
+  .span2 { grid-column: span 2; min-width: 0; display: flex; flex-direction: column; gap: 22px; }
+  .side { min-width: 0; display: flex; flex-direction: column; gap: 22px; }
+  @media (max-width: 1100px) { .span2 { grid-column: span 1; } }
+
+  .stage-head { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+                flex-wrap: wrap; border-bottom: 3px solid var(--ink); padding: 10px 16px;
+                background: var(--base); font-family: var(--mono); font-size: 12px; font-weight: 700;
+                letter-spacing: 1px; }
+  .stage-head .step { font-weight: 400; letter-spacing: 0; }
+  .stage-body { padding: 24px 16px 12px; }
+
+  .bars { display: flex; align-items: flex-end; justify-content: center; height: 300px;
+          border-bottom: 3px solid var(--ink); }
+  .bars > div { flex: 1 1 0; max-width: 78px; min-width: 0; display: flex; flex-direction: column;
+                align-items: center; justify-content: flex-end; height: 100%; }
+  .bars .v { font-family: var(--mono); font-size: 11px; font-weight: 700; margin-bottom: 4px; }
+  .bars .bar { width: 100%; border: 3px solid var(--ink); border-bottom: none;
+               transition: height var(--dur) var(--ease), background var(--dur) var(--ease); }
+  .axis { display: flex; justify-content: center; padding-top: 6px; }
+  .axis div { flex: 1 1 0; max-width: 78px; min-width: 0; text-align: center;
+              font-family: var(--mono); font-size: 10px; opacity: .6; }
+
+  .netwrap { border-bottom: 3px solid var(--ink); padding-bottom: 10px; }
+  .netwrap svg { width: 100%; height: 320px; display: block; }
+  .netwrap circle, .netwrap text { transition: fill var(--dur) var(--ease); }
+
+  .tablewrap { min-height: 300px; display: flex; align-items: center; justify-content: center;
+               border-bottom: 3px solid var(--ink); padding: 14px 0 18px; overflow: auto; }
+  .trow { display: flex; gap: 4px; margin-bottom: 4px; align-items: center; }
+  .thead { font-family: var(--mono); font-size: 12px; font-weight: 700; opacity: .75;
+           text-align: center; flex: none; }
+  .tcell { flex: none; display: flex; align-items: center; justify-content: center;
+           border: 3px solid var(--ink); font-family: var(--mono); font-size: 14px; font-weight: 700;
+           transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+
+  .linear { min-height: 300px; display: flex; align-items: center; justify-content: center;
+            border-bottom: 3px solid var(--ink); padding: 10px 0 20px; }
+  .linear .set { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .linear .item { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .linear .box { min-width: 78px; padding: 16px 14px; border: 3px solid var(--ink);
+                 font-family: var(--mono); font-weight: 700; font-size: 19px; text-align: center;
+                 box-shadow: 5px 5px 0 var(--ink);
+                 transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+  .linear .tag { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .5px; }
+
+  .transport { border-top: 3px solid var(--ink); padding: 14px 16px; display: flex;
+               flex-wrap: wrap; gap: 12px; align-items: center; background: var(--paper); }
+  .transport button.sq { border: 3px solid var(--ink); background: #fff; width: 46px; height: 46px;
+                         font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 4px 4px 0 var(--ink); }
+  .transport button.wide { border: 3px solid var(--ink); background: #fff; height: 46px;
+                           padding: 0 14px; font-family: var(--mono); font-size: 12px; font-weight: 700;
+                           cursor: pointer; box-shadow: 4px 4px 0 var(--ink); }
+  #play { border: 3px solid var(--ink); color: #fff; height: 46px; padding: 0 20px; font-size: 14px;
+          font-weight: 700; cursor: pointer; box-shadow: 4px 4px 0 var(--ink); background: var(--cmp); }
+  #play.playing { background: var(--swap); }
+  #scrub { flex: 1 1 200px; min-width: 140px; accent-color: var(--cmp); height: 46px; }
+  .speeds { display: flex; gap: 6px; }
+  .speeds button { border: 3px solid var(--ink); background: #fff; padding: 8px 10px;
+                   font-family: var(--mono); font-size: 12px; font-weight: 700; cursor: pointer; }
+  .speeds button.on { background: var(--cmp); color: #fff; }
+
+  .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 22px; }
+  .note { border: 4px solid var(--ink); background: var(--cmp); color: #fff;
+          box-shadow: 8px 8px 0 var(--ink); padding: 16px; }
+  .note .vi { font-size: 19px; font-weight: 700; line-height: 1.3; text-wrap: pretty; min-height: 52px; }
+  .note .vi code { font-family: var(--mono); font-size: 16px; background: rgba(255,255,255,.18); padding: 1px 6px; }
+  .note .en { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; opacity: .85; margin-top: 8px; }
+  .vars { border: 4px solid var(--ink); background: #fff; box-shadow: 8px 8px 0 var(--ink); padding: 16px; }
+  .vars .set { display: flex; flex-wrap: wrap; gap: 8px; }
+  .vars .chip { border: 3px solid var(--ink); background: var(--paper); padding: 8px 10px;
+                font-family: var(--mono); font-size: 13px; }
+  .vars .chip span { opacity: .6; }
+
+  .code { border: 4px solid var(--ink); background: var(--ink); box-shadow: 8px 8px 0 var(--ink); }
+  .code .file { border-bottom: 3px solid var(--base); padding: 10px 14px; font-family: var(--mono);
+                font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--base); }
+  .code .lines { padding: 12px 0; overflow: auto; max-height: 60vh; }
+  .code .lines div { display: flex; gap: 12px; padding: 3px 14px;
+                     transition: background var(--dur) var(--ease); }
+  .code .n { font-family: var(--mono); font-size: 12px; color: #5a5a5a; width: 20px;
+             text-align: right; flex: none; }
+  .code .t { font-family: var(--mono); font-size: 12.5px; white-space: pre; color: #d9d5c8; }
+  .code .on { background: var(--cmp); }
+  .code .on .t, .code .on .n { color: #fff; }
+
+  .stats { border: 4px solid var(--ink); background: var(--done); box-shadow: 8px 8px 0 var(--ink); padding: 16px; }
+  .stats .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stats .box { border: 3px solid var(--ink); background: #fff; padding: 10px; }
+  .stats .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: .5px; opacity: .65; }
+  .stats .v { font-size: 22px; font-weight: 700; letter-spacing: -.5px; line-height: 1.2; }
+
+  .log { border: 4px solid var(--ink); background: #fff; box-shadow: 8px 8px 0 var(--ink); }
+  .log .head { border-bottom: 3px solid var(--ink); padding: 10px 14px; font-family: var(--mono);
+               font-size: 11px; font-weight: 700; letter-spacing: 1px; background: var(--swap); color: #fff; }
+  .log .list { max-height: 280px; overflow: auto; }
+  .log .list > div { border-bottom: 2px solid var(--rule); padding: 10px 14px; display: flex; gap: 10px; }
+  .log .list > div.now { background: var(--soft); }
+  .log .n { font-family: var(--mono); font-size: 11px; font-weight: 700; opacity: .5; flex: none; }
+  .log .vi { font-size: 13.5px; line-height: 1.45; }
+  .log .en { display: block; font-family: var(--mono); font-size: 11.5px; opacity: .6; }
+  .log .vi code { font-family: var(--mono); }
+
+  .err { border: 3px solid var(--ink); background: var(--swap); color: #fff; padding: 12px;
+         font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; }
 
   footer { border-top: 4px solid var(--ink); background: var(--ink); color: var(--paper);
-           padding: 20px 24px; font-family: var(--mono); font-size: 12px;
-           display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
+           padding: 22px 24px; font-family: var(--mono); font-size: 12px;
+           display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
   @media (prefers-reduced-motion: reduce) { :root { --dur: 0ms; } }
 </style>
 </head>
 <body>
 
-<!-- arrowhead for directed edges; ids resolve document-wide, so define it once -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-    <path d="M 0 0 L 10 5 L 0 10 z" fill="#101010"></path>
-  </marker>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5"
+          orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#101010"></path></marker>
 </defs></svg>
 
 <header>
@@ -215,17 +226,10 @@
     <div class="logo">J</div>
     <div><b>JAVA·VIZ</b><small>ALGORITHM VISUALIZER</small></div>
   </div>
-  <div class="toolbar">
-    <button id="navHome">Trang chủ / Home</button>
-    <button id="navViz">Visualizer</button>
-    <span id="vizTools" class="toolbar">
-      <select id="preset"></select>
-      <button id="run" class="primary">▶ Chạy / Run</button>
-      <label class="mono" style="font-size:11px;font-weight:700">
-        <input type="checkbox" id="auto" checked> AUTO-RUN
-      </label>
-      <span class="status" id="status">idle</span>
-    </span>
+  <div class="nav">
+    <button class="btn" id="navHome">Trang chủ / Home</button>
+    <button class="btn" id="navViz">Visualizer</button>
+    <button class="btn" id="navLang">VI + EN</button>
   </div>
 </header>
 
@@ -234,12 +238,12 @@
     <div>
       <div class="badge">HỌC DSA BẰNG MẮT · SEE THE ALGORITHM</div>
       <h1>Thuật toán Java,<br>chạy từng bước<br>ngay trước mắt.</h1>
-      <p class="lead">Chọn thuật toán hoặc dán code Java của bạn, rồi tua từng bước: mảng, biến,
-        dòng code đang chạy và lời giải thích luôn khớp nhau.</p>
-      <p class="sub">Pick an algorithm or paste your own Java, then scrub step by step — array,
-        variables, the running line and the narration always stay in sync.</p>
+      <p class="lead">Chọn thuật toán, nhập dữ liệu của riêng bạn, rồi tua từng bước: mảng, biến,
+        dòng code Java đang chạy và lời giải thích luôn khớp nhau.</p>
+      <p class="sub">Pick an algorithm, feed it your own data, and scrub step by step — array,
+        variables, the running Java line and the narration always stay in sync.</p>
       <div class="cta">
-        <button class="primary" id="ctaOpen">▶ Mở Visualizer</button>
+        <button class="blue" id="ctaOpen">▶ Mở Visualizer</button>
         <button id="ctaBubble">Xem Bubble Sort chạy</button>
       </div>
     </div>
@@ -248,380 +252,337 @@
         PREVIEW · bubbleSort(int[] a)</div>
       <div class="bars" id="heroBars"></div>
       <div class="keys">
-        <span class="tag" style="background:var(--yellow)">chưa xét / idle</span>
-        <span class="tag" style="background:var(--orange);color:#fff">đang so sánh / compare</span>
-        <span class="tag" style="background:var(--lime)">vừa đổi chỗ / swapped</span>
+        <span style="background:var(--base)">so sánh / compare</span>
+        <span style="background:var(--swap);color:#fff">hoán vị / swap</span>
+        <span style="background:var(--done)">đã xong / sorted</span>
       </div>
     </div>
   </div>
 
-  <div class="section-head">
-    <h2>Danh mục thuật toán</h2><span>/ Algorithm catalog</span>
-    <span class="tag" style="margin-left:auto;background:var(--yellow)" id="totalCount"></span>
-  </div>
+  <div class="sect"><h2>Danh mục thuật toán</h2><span>/ Algorithm catalog</span></div>
   <div class="catalog" id="catalog"></div>
 </div>
 
-<main id="app" hidden>
-  <div class="col">
-    <div class="card dark">
-      <div class="head"><span>Main.java · NHẬP CODE / YOUR CODE</span></div>
-      <textarea id="src" spellcheck="false"></textarea>
+<div class="viz" id="app" hidden>
+  <div class="controls">
+    <div class="grow-full">
+      <div class="lbl">NHÓM / CATEGORY</div>
+      <div class="tabs" id="catTabs"></div>
     </div>
-    <div class="card dark">
-      <div class="head"><span>ĐANG CHẠY / RUNNING LINE</span><span id="lineno">—</span></div>
-      <div class="codelines" id="codeview"></div>
+    <div class="grow-340">
+      <div class="lbl">THUẬT TOÁN / ALGORITHM</div>
+      <div class="tabs" id="algoTabs"></div>
     </div>
-  </div>
-
-  <div class="col">
-    <div class="card">
-      <div class="head" style="background:var(--orange);color:#fff">
-        <span id="algotitle">—</span><span id="stepno">step 0 / 0</span>
-      </div>
-      <div class="body" id="stage"></div>
-      <div class="head" style="border-bottom:none;border-top:3px solid var(--ink);background:var(--paper)">
-        <button class="sq" id="first" disabled>⏮</button>
-        <button class="sq" id="prev" disabled>◀</button>
-        <button id="play" disabled style="height:46px">PLAY</button>
-        <button class="sq" id="next" disabled>▶</button>
-        <button class="sq" id="last" disabled>⏭</button>
-        <input type="range" id="scrub" min="0" max="0" value="0" style="flex:1 1 180px;min-width:120px" disabled>
-        <span id="speeds" style="display:flex;gap:6px"></span>
+    <div class="grow-260" id="inputWrap">
+      <div class="lbl" id="inputLabel">DỮ LIỆU / INPUT ARRAY</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="input">
+        <button class="btn" id="randomize" style="background:var(--done)">⟳</button>
       </div>
     </div>
+    <div class="fix-130" id="targetWrap" hidden>
+      <div class="lbl">MỤC TIÊU / TARGET</div>
+      <input type="text" id="target" style="width:100%;border:3px solid var(--ink);padding:10px;font-family:var(--mono);font-size:13px;background:var(--paper)">
+    </div>
+    <button class="run" id="build">Áp dụng / Run</button>
+  </div>
 
-    <div class="card note">
-      <div class="head">ĐANG XẢY RA / WHAT'S HAPPENING</div>
-      <div class="body"><div class="vi" id="noteVi">—</div><div class="en" id="noteEn"></div></div>
+  <div class="grid">
+    <div class="span2">
+      <div class="card">
+        <div class="stage-head">
+          <div id="algoTitle">—</div><div class="step" id="stepNo">step 0 / 0</div>
+        </div>
+        <div class="stage-body" id="stage"></div>
+        <div class="transport">
+          <button class="sq" id="prev">◀</button>
+          <button id="play">▶ Chạy</button>
+          <button class="sq" id="next">▶</button>
+          <button class="wide" id="reset">RESET</button>
+          <input type="range" id="scrub" min="0" max="0" value="0">
+          <div class="speeds" id="speeds"></div>
+        </div>
+      </div>
+
+      <div class="pair">
+        <div class="note">
+          <div class="lbl">ĐANG XẢY RA / WHAT'S HAPPENING</div>
+          <div class="vi" id="noteVi">Nhấn ▶ Chạy để bắt đầu.</div>
+          <div class="en" id="noteEn"></div>
+        </div>
+        <div class="vars">
+          <div class="lbl">BIẾN / VARIABLES</div>
+          <div class="set" id="vars"></div>
+        </div>
+      </div>
     </div>
 
-    <div class="card">
-      <div class="head">BIẾN / VARIABLES</div>
-      <div class="body"><div class="chips" id="vars"></div></div>
-    </div>
-
-    <div class="card">
-      <div class="head">NHẬT KÝ / STEP LOG</div>
-      <div class="log" id="log"></div>
-    </div>
-
-    <div class="card" style="background:var(--lime)">
-      <div class="head">NGĂN XẾP &amp; KẾT QUẢ / STACK &amp; OUTPUT</div>
-      <div class="body"><div class="stack" id="stack"></div><div id="output" style="margin-top:12px"></div></div>
+    <div class="side">
+      <div class="code">
+        <div class="file" id="fileName">Main.java</div>
+        <div class="lines" id="codeLines"></div>
+      </div>
+      <div class="stats">
+        <div class="lbl">ĐỘ PHỨC TẠP / COMPLEXITY</div>
+        <div class="grid2" id="stats"></div>
+      </div>
+      <div class="log">
+        <div class="head">NHẬT KÝ / STEP LOG</div>
+        <div class="list" id="log"></div>
+      </div>
     </div>
   </div>
-</main>
+</div>
 
 <footer>
   <span>JAVA·VIZ — học thuật toán bằng cách nhìn nó chạy.</span>
-  <span style="opacity:.6">Sorting · Searching · Arrays · Strings · Linked list · Stack · Trees · Graphs · DP · Backtracking · Math</span>
+  <span style="opacity:.6" id="footNote"></span>
 </footer>
 
 <script src="presets.js"></script>
 <script>
 const $ = id => document.getElementById(id);
-const preset = $("preset"), src = $("src"), codeview = $("codeview"), stage = $("stage"),
-      status = $("status"), scrub = $("scrub");
+const PAL = { base: "var(--base)", cmp: "var(--cmp)", swap: "var(--swap)",
+              done: "var(--done)", pivot: "var(--pivot)" };
 
-let steps = [], at = 0, timer = null, lines = [], debounce = null, running = false;
-let constant = new Set(), delay = 320, pendingStep = null;
-const views = new Map();   // variable name -> live DOM, kept across steps so CSS can animate
-
-/* ---------------- presets ---------------- */
+let steps = [], notes = [], at = 0, timer = null, lines = [], running = false;
+let constant = new Set(), graphVars = new Set(), treeVars = new Set(), forestVars = new Set();
+let speed = 1, lang = "both", algo = "", pendingStep = null;
+const views = new Map();
 
 const CODE = {};
+const GROUP_OF = {};
 for (const [group, items] of Object.entries(PRESETS)) {
-  const og = document.createElement("optgroup");
-  og.label = group;
-  for (const [name, code] of Object.entries(items)) {
-    CODE[name] = code;
-    og.appendChild(new Option(name, name));
-  }
-  preset.appendChild(og);
+  for (const [name, code] of Object.entries(items)) { CODE[name] = code; GROUP_OF[name] = group; }
 }
-preset.onchange = () => openAlgo(preset.value);
-src.value = CODE[preset.value];
+algo = Object.keys(CODE)[0];
+$("footNote").textContent = Object.keys(CODE).length + " thuật toán · "
+  + CATS.map(c => c[1].split(" / ")[1]).join(" · ");
 
-/* ---------------- home page ---------------- */
+/* ---------------- home ---------------- */
 
-// Vietnamese/English name, glyph, typical complexity and card colour per category.
-const CATEGORY = {
-  "Sorting":             ["Sắp xếp", "⇅", "O(n log n)", "var(--yellow)"],
-  "Searching":           ["Tìm kiếm", "?", "O(log n)", "var(--lime)"],
-  "Arrays":              ["Mảng & hai con trỏ", "[ ]", "O(n)", "#fff"],
-  "Strings":             ["Chuỗi", "Ab", "O(n)", "var(--orange)"],
-  "Linked list":         ["Danh sách liên kết", "→", "O(n)", "var(--yellow)"],
-  "Stack & queue":       ["Ngăn xếp & hàng đợi", "⊓", "O(1)", "var(--lime)"],
-  "Trees":               ["Cây", "⋔", "O(h)", "#fff"],
-  "Graphs":              ["Đồ thị", "◉", "O(V+E)", "var(--orange)"],
-  "Dynamic programming": ["Quy hoạch động", "Σ", "O(n·m)", "var(--yellow)"],
-  "Backtracking":        ["Quay lui", "⑂", "O(n!)", "var(--lime)"],
-  "Math":                ["Toán học", "π", "O(√n)", "#fff"]
-};
+// icons / colours cycle through the design's catalog palette
+const ICONS = ["↕", "🔍", "[ ]", "≡", "→", "▣", "⋔", "◈", "∑", "♛", "π"];
+const CARD_BG = ["#FFD84D", "#A8E10C", "#FF6B4A", "#C77DFF", "#7ED9F0", "#FFB3C7",
+                 "#fff", "#FFD84D", "#A8E10C", "#7ED9F0", "#fff"];
 
 function buildHome() {
-  $("totalCount").textContent = `${Object.keys(CODE).length} thuật toán / algorithms`;
-  $("heroBars").innerHTML = [[38, "var(--yellow)"], [62, "var(--yellow)"], [90, "var(--blue)"],
-                             [72, "var(--orange)"], [100, "var(--lime)"], [54, "var(--yellow)"],
-                             [80, "var(--yellow)"], [46, "var(--orange)"], [66, "var(--yellow)"]]
-    .map(([h, bg], i) => `<div style="height:${h}%;background:${bg};animation-delay:${i * 90}ms"></div>`).join("");
+  $("heroBars").innerHTML = [40, 88, 62, 120, 30, 150, 74, 105, 52].map((h, i) =>
+    `<div style="height:${h / 1.6}%;background:${[PAL.base, PAL.base, PAL.cmp, PAL.swap, PAL.done,
+      PAL.base, PAL.base, PAL.swap, PAL.base][i]}"></div>`).join("");
 
-  $("catalog").innerHTML = Object.entries(PRESETS).map(([group, items]) => {
-    const [vi, icon, big, bg] = CATEGORY[group] || [group, "•", "", "#fff"];
-    const white = bg === "var(--orange)";
-    return `<div class="cat" style="background:${bg};${white ? "color:#fff" : ""}">
-      <div class="top">
-        <div class="icon" style="color:var(--ink)">${icon}</div>
-        <span class="tag" style="background:#fff;color:var(--ink)">${big}</span>
-      </div>
-      <div><h3>${escapeHtml(vi)}</h3><div class="en">${escapeHtml(group)} · ${Object.keys(items).length} bài</div></div>
-      <ul>${Object.keys(items).map(n =>
-        `<li>› <button data-open="${escapeHtml(n)}">${escapeHtml(n)}</button></li>`).join("")}</ul>
-      <button data-open="${escapeHtml(Object.keys(items)[0])}"
-              style="background:var(--ink);color:var(--yellow)">Mở / Open →</button>
+  $("catalog").innerHTML = CATS.map(([group, label], i) => {
+    const items = Object.keys(PRESETS[group] || {});
+    const [vi, en] = label.split(" / ");
+    const big = COMPLEXITY[items[0]] ? COMPLEXITY[items[0]][0] : "";
+    return `<div class="cat" style="background:${CARD_BG[i % CARD_BG.length]}">
+      <div class="top"><div class="icon">${ICONS[i % ICONS.length]}</div>
+        <span class="big">${big}</span></div>
+      <div><div class="vi">${esc(vi)}</div><div class="en">${esc(en)} · ${items.length} bài</div></div>
+      <div class="items">${items.map(esc).join(" · ")}</div>
+      <button data-open="${esc(items[0])}">▶ Chạy thử / Try it</button>
     </div>`;
   }).join("");
-
   $("catalog").onclick = e => {
     const name = e.target.closest("[data-open]")?.dataset.open;
     if (name) openAlgo(name);
   };
 }
 
-/** Opens one algorithm in the visualizer; no argument goes back to the catalog. */
+/* ---------------- routing ---------------- */
+
 function openAlgo(name) {
   stop();
   const next = name ? encodeURIComponent(name) : "home";
-  if (name) { preset.value = name; src.value = CODE[name]; }
-  // hashchange drives route(); call it directly when the hash is already right
   if (location.hash.slice(1) === next) route(); else location.hash = next;
 }
-
 function route() {
   const raw = decodeURIComponent(location.hash.slice(1));
-  // "#Bubble sort@42" opens that algorithm paused on step 42
-  const cut = raw.lastIndexOf("@");
-  const hash = cut > 0 && /^\d+$/.test(raw.slice(cut + 1)) ? raw.slice(0, cut) : raw;
-  pendingStep = hash === raw ? null : +raw.slice(cut + 1) - 1;
-  const viz = !!CODE[hash];
-  if (viz) preset.value = hash;
+  const cut = raw.lastIndexOf("@");                     // "#Bubble sort@42" pauses on step 42
+  const name = cut > 0 && /^\d+$/.test(raw.slice(cut + 1)) ? raw.slice(0, cut) : raw;
+  pendingStep = name === raw ? null : +raw.slice(cut + 1) - 1;
+  const viz = !!CODE[name];
+  if (viz) algo = name;
   $("home").hidden = viz;
   $("app").hidden = !viz;
-  $("vizTools").style.display = viz ? "" : "none";
-  $("navHome").style.background = viz ? "#fff" : "var(--yellow)";
-  $("navViz").style.background = viz ? "var(--yellow)" : "#fff";
-  if (viz && src.value !== CODE[hash]) src.value = CODE[hash];
-  if (viz) run(); else { stop(); reset(); }
+  $("navHome").classList.toggle("on", !viz);
+  $("navViz").classList.toggle("on", viz);
+  if (viz) { syncControls(); build(); } else { stop(); }
 }
-
 $("navHome").onclick = () => openAlgo(null);
-$("navViz").onclick = () => openAlgo(preset.value);
-$("ctaOpen").onclick = () => openAlgo(preset.value);
+$("navViz").onclick = () => openAlgo(algo);
+$("ctaOpen").onclick = () => openAlgo(algo);
 $("ctaBubble").onclick = () => openAlgo("Bubble sort");
+$("navLang").onclick = () => {
+  lang = lang === "both" ? "vi" : lang === "vi" ? "en" : "both";
+  $("navLang").textContent = lang === "both" ? "VI + EN" : lang.toUpperCase();
+  if (steps.length) render();
+};
 addEventListener("hashchange", route);
 
 /* ---------------- controls ---------------- */
 
-for (const [label, ms] of [["0.5×", 640], ["1×", 320], ["2×", 160], ["4×", 70]]) {
+function syncControls() {
+  const group = GROUP_OF[algo];
+  $("catTabs").innerHTML = CATS.map(([id, label]) =>
+    `<button class="btn ${id === group ? "on" : ""}" data-cat="${esc(id)}">${esc(label)}</button>`).join("");
+  $("algoTabs").innerHTML = Object.keys(PRESETS[group]).map(name =>
+    `<button class="btn ${name === algo ? "on" : ""}" data-algo="${esc(name)}">${esc(name)}</button>`).join("");
+
+  const source = CODE[algo];
+  const arr = readArray(source);
+  $("inputWrap").hidden = !arr.length;
+  $("input").value = arr.join(", ");
+  const target = readTarget(source);
+  $("targetWrap").hidden = target === null;
+  $("target").value = target === null ? "" : target;
+  $("fileName").textContent = "Main.java · " + algo.toUpperCase();
+}
+$("catTabs").onclick = e => {
+  const id = e.target.closest("[data-cat]")?.dataset.cat;
+  if (id) openAlgo(Object.keys(PRESETS[id])[0]);
+};
+$("algoTabs").onclick = e => {
+  const name = e.target.closest("[data-algo]")?.dataset.algo;
+  if (name) openAlgo(name);
+};
+$("randomize").onclick = () => {
+  const n = Math.max(4, readArray(CODE[algo]).length);
+  $("input").value = Array.from({ length: n }, () => 1 + Math.floor(Math.random() * 20)).join(", ");
+  build();
+};
+$("build").onclick = build;
+$("input").onkeydown = e => { if (e.key === "Enter") build(); };
+$("target").onkeydown = e => { if (e.key === "Enter") build(); };
+
+// Only a plain 1-D int literal is editable; a 2-D weight matrix or an array
+// holding INF placeholders is left alone (the design hides the box then).
+const ARRAY_LITERAL = /(?:^|[^\]])\bint\[\]\s+\w+\s*=\s*\{\s*-?\d+(?:\s*,\s*-?\d+)*\s*\}/;
+function readArray(source) {
+  const m = source.match(ARRAY_LITERAL);
+  if (!m) return [];
+  return m[0].slice(m[0].indexOf("{") + 1, -1).split(",").map(x => +x.trim());
+}
+function readTarget(source) {
+  const m = source.match(/\bint\s+target\s*=\s*(-?\d+)/);
+  return m ? +m[1] : null;
+}
+/** Applies the input boxes back into the source before tracing. */
+function sourceWithInput() {
+  let source = CODE[algo];
+  const wanted = $("input").value.split(",").map(x => parseInt(x, 10)).filter(Number.isInteger);
+  if (wanted.length && readArray(source).length) {
+    source = source.replace(ARRAY_LITERAL, m => m.replace(/\{[^{}]*\}/, "{" + wanted.join(", ") + "}"));
+  }
+  const target = parseInt($("target").value, 10);
+  if (Number.isInteger(target) && readTarget(source) !== null) {
+    source = source.replace(/(\bint\s+target\s*=\s*)-?\d+/, "$1" + target);
+  }
+  return source;
+}
+
+for (const sp of [0.5, 1, 2, 4]) {
   const b = document.createElement("button");
-  b.textContent = label;
-  b.className = "mono";
-  b.style.cssText = "padding:6px 9px;font-size:11px;box-shadow:3px 3px 0 var(--ink)";
-  b.onclick = () => { delay = ms; markSpeed(); if (timer) { stop(); play(); } };
-  b.dataset.ms = ms;
+  b.textContent = sp + "×";
+  b.onclick = () => { speed = sp; markSpeed(); if (timer) { stop(); play(); } };
+  b.dataset.sp = sp;
   $("speeds").appendChild(b);
 }
 function markSpeed() {
-  [...$("speeds").children].forEach(b => b.style.background = +b.dataset.ms === delay ? "var(--yellow)" : "#fff");
-  document.documentElement.style.setProperty("--dur", Math.min(delay * 0.7, 400) + "ms");
+  [...$("speeds").children].forEach(b => b.classList.toggle("on", +b.dataset.sp === speed));
+  document.documentElement.style.setProperty("--dur", Math.min(320 / speed * 0.7, 400) + "ms");
 }
 markSpeed();
 
-src.oninput = () => {                       // typing stops for 900ms -> trace automatically
-  if (!$("auto").checked) return;
-  clearTimeout(debounce);
-  status.textContent = "chờ gõ xong…";
-  debounce = setTimeout(run, 900);
-};
-$("run").onclick = run;
-$("first").onclick = () => { stop(); at = 0; render(); };
-$("last").onclick = () => { stop(); at = steps.length - 1; render(); };
 $("prev").onclick = () => { stop(); at = Math.max(0, at - 1); render(); };
 $("next").onclick = () => { stop(); at = Math.min(steps.length - 1, at + 1); render(); };
 $("play").onclick = () => timer ? stop() : play();
-scrub.oninput = () => { stop(); at = +scrub.value; render(); };
+$("reset").onclick = () => { stop(); at = 0; render(); };
+$("scrub").oninput = () => { stop(); at = +$("scrub").value; render(); };
 addEventListener("resize", () => { if (steps.length) render(); });
 
 function play() {
   if (at >= steps.length - 1) at = 0;
-  $("play").textContent = "PAUSE";
+  $("play").textContent = "❚❚ Tạm dừng";
+  $("play").classList.add("playing");
   timer = setInterval(() => {
     if (at >= steps.length - 1) { stop(); return; }
     at++;
     render();
-  }, delay);
+  }, 320 / speed);
 }
-function stop() { clearInterval(timer); timer = null; $("play").textContent = "PLAY"; }
-function enable(on) {
-  ["first", "prev", "play", "next", "last"].forEach(id => $(id).disabled = !on);
-  scrub.disabled = !on;
+function stop() {
+  clearInterval(timer);
+  timer = null;
+  $("play").textContent = "▶ Chạy";
+  $("play").classList.remove("playing");
 }
 
-/* ---------------- run ---------------- */
+/* ---------------- trace ---------------- */
 
-async function run() {
+async function build() {
   if (running) return;
   running = true;
-  clearTimeout(debounce);
   stop();
-  enable(false);
-  status.textContent = "đang biên dịch…";
-  reset();
+  views.clear();
+  $("stage").innerHTML = "";
+  $("algoTitle").textContent = algo.toUpperCase();
   try {
     let data;
     try {
-      const res = await fetch("/api/trace", { method: "POST", body: src.value });
+      const res = await fetch("/api/trace", { method: "POST", body: sourceWithInput() });
       data = await res.json();
     } catch (e) {
-      status.textContent = "backend lỗi";
-      $("output").innerHTML = `<div class="err">Không kết nối được backend: ${escapeHtml(String(e))}</div>`;
+      $("stage").innerHTML = `<div class="err">Không gọi được backend: ${esc(String(e))}</div>`;
       return;
     }
-    if (!data.ok) {
-      status.textContent = "lỗi biên dịch";
-      $("output").innerHTML = `<div class="err">${escapeHtml(data.error)}</div>`;
+    if (!data.ok || !data.steps.length) {
+      $("stage").innerHTML = `<div class="err">${esc(data.error || "Không trace được dòng nào.")}</div>`;
       return;
     }
     steps = data.steps;
     window.stdout = data.stdout;
-    window.truncated = data.truncated;
-    if (!steps.length) {
-      status.textContent = "không có bước nào";
-      $("output").innerHTML = `<div class="err">Không trace được dòng nào. Code phải là class Main có hàm main.</div>`;
-      return;
-    }
-    lines = src.value.split("\n");
-    constant = findConstantArrays(steps);
+    lines = sourceWithInput().split("\n");
+    constant = findConstant(steps);
     graphVars = findGraphVars(steps);
     treeVars = findTreeVars(steps);
     forestVars = findForestVars(steps);
-    notes = steps.map((s, i) => describe(i > 0 ? steps[i - 1] : null, s));   // narration, once
-    at = 0;
-    scrub.max = steps.length - 1;
-    $("algotitle").textContent = preset.value.toUpperCase();
-    enable(true);
-    if (pendingStep !== null) {
-      at = Math.max(0, Math.min(steps.length - 1, pendingStep));
-      render();
-    } else {
-      render();
-      play();
-    }
+    notes = steps.map((s, i) => describe(i > 0 ? steps[i - 1] : null, s));
+    $("scrub").max = steps.length - 1;
+    at = pendingStep !== null ? Math.max(0, Math.min(steps.length - 1, pendingStep)) : 0;
+    drawCode();
+    render();
+    if (pendingStep === null) play();
+    pendingStep = null;
   } finally {
     running = false;
   }
 }
 
-let notes = [];
-
-/** Arrays that never change (offset tables, lookups) — shown compact, not as a chart. */
-function findConstantArrays(steps) {
+function findConstant(steps) {
   const first = {}, changing = new Set();
   for (const s of steps) {
     for (const [k, v] of Object.entries(s.vars)) {
       if (!Array.isArray(v)) continue;
       const j = JSON.stringify(v);
-      if (first[k] === undefined) first[k] = j;
-      else if (first[k] !== j) changing.add(k);
+      if (first[k] === undefined) first[k] = j; else if (first[k] !== j) changing.add(k);
     }
   }
   return new Set(Object.keys(first).filter(k => !changing.has(k)));
 }
 
-function reset() {
-  steps = []; lines = []; notes = []; views.clear();
-  codeview.innerHTML = ""; stage.innerHTML = ""; $("vars").innerHTML = "";
-  $("log").innerHTML = ""; $("stack").innerHTML = ""; $("output").innerHTML = "";
-  $("noteVi").textContent = "—"; $("noteEn").textContent = "";
-}
+/* ---------------- structure detection ---------------- */
 
-/* ---------------- pointers ---------------- */
-
-// ponytail: name-based heuristic — a pointer called `cursor` is missed and a
-// same-named value var is mislabelled. Infer from bytecode array access if it matters.
+const TREE_NAMES = ["tree", "heap", "bst"], FOREST_NAMES = ["parent", "par", "leader"];
 const POINTER_NAMES = ["i", "j", "k", "mid", "lo", "hi", "left", "right", "low", "high",
                        "start", "end", "first", "last", "cur", "curr", "pos", "idx", "index",
                        "p", "q", "head", "tail", "front", "rear", "pivot", "read", "write",
                        "top", "row", "col", "r", "c", "nr", "nc", "amount", "step"];
-const POINTER_COLORS = ["var(--orange)", "var(--blue)", "var(--lime)", "var(--yellow)"];
-const POINTER_FG = { "var(--blue)": "#fff", "var(--orange)": "#fff" };
-const WINDOWS = [["lo", "hi"], ["low", "high"], ["left", "right"], ["start", "end"], ["first", "last"]];
-// names that really mean "this node", used by the graph/tree views
 const NODE_POINTERS = ["i", "j", "k", "u", "v", "cur", "curr", "node", "idx", "index",
                        "next", "p", "q", "r", "c", "root", "top", "head", "tail", "step"];
+const WINDOWS = [["lo", "hi"], ["low", "high"], ["left", "right"], ["start", "end"], ["first", "last"]];
+const SUB_NAMES = ["dist", "d", "done", "visited", "order", "color", "parent", "indegree", "seen"];
 
-function findPointers(vars) {
-  return POINTER_NAMES.filter(n => Number.isInteger(vars[n]))
-    .map((name, i) => ({ name, idx: vars[name], color: POINTER_COLORS[i % POINTER_COLORS.length] }));
-}
-
-/* ---------------- value shapes ---------------- */
-
-// JDK collections are backed by arrays; read their real element order out of the store.
-function unwrap(o) {
-  if (!o || typeof o !== "object" || Array.isArray(o)) return null;
-  const box = v => (v && typeof v === "object" && "value" in v) ? v.value : v;
-  if (Array.isArray(o.elementData) && Number.isInteger(o.size)) return o.elementData.slice(0, o.size).map(box);
-  if (Array.isArray(o.elements) && Number.isInteger(o.head) && Number.isInteger(o.tail)) {
-    const n = o.elements.length, out = [];                    // ArrayDeque: circular buffer
-    for (let i = o.head; i !== o.tail; i = (i + 1) % n) out.push(box(o.elements[i]));
-    return out;
-  }
-  return null;
-}
-
-// A node with `next` plus a payload field is a linked list. The chain stops where the
-// tracer's depth cap truncated it (a cycle just runs into that cap).
-function unwrapList(o) {
-  if (!o || typeof o !== "object" || Array.isArray(o) || !("next" in o)) return null;
-  const key = ["val", "value", "data", "item"].find(k => k in o);
-  if (!key) return null;
-  const out = [];
-  for (let n = o; n && typeof n === "object" && key in n && out.length < 64; n = n.next) out.push(n[key]);
-  return out;
-}
-
-// HashMap/LinkedHashMap: walk the bucket table and each bucket's chain.
-function unwrapMap(o) {
-  if (!o || typeof o !== "object" || Array.isArray(o) || !Array.isArray(o.table)) return null;
-  const pairs = [];
-  for (let node of o.table) {
-    while (node && typeof node === "object" && "key" in node) {
-      pairs.push([node.key, node.value]);
-      node = node.next;
-    }
-  }
-  return pairs;
-}
-
-/** StringBuilder/StringBuffer keep their characters in a byte[]; read the text out. */
-function textOf(o) {
-  if (!o || typeof o !== "object" || !/StringBu/.test(String(o.__type))) return null;
-  if (!Array.isArray(o.value) || !Number.isInteger(o.count)) return null;
-  return o.value.slice(0, o.count).map(b => String.fromCharCode(b & 255)).join("");
-}
-
-const typeName = o => String(o.__type || "").replace(/.*\./, "");
-
-/* --- graphs & trees: decided once per run so the view never flickers --- */
-
-const TREE_NAMES = ["tree", "heap", "bst"];
-const FOREST_NAMES = ["parent", "par", "leader"];
-let graphVars = new Set(), treeVars = new Set(), forestVars = new Set();
-
-/** A square int matrix with a zero diagonal and at least one edge is an
- *  adjacency/weight matrix. DP tables fail the diagonal test once filled. */
 function findGraphVars(steps) {
   const last = {};
   for (const s of steps) {
@@ -638,9 +599,6 @@ function findGraphVars(steps) {
   }
   return out;
 }
-
-/** Heap-encoded binary trees are only recognisable by convention.
- *  ponytail: name-based — rename `tree` and it falls back to a box row. */
 function findTreeVars(steps) {
   const out = new Set();
   for (const s of steps) {
@@ -651,8 +609,6 @@ function findTreeVars(steps) {
   }
   return out;
 }
-
-/** parent[] holding valid indices is a disjoint-set forest. */
 function findForestVars(steps) {
   const out = new Set();
   for (const s of steps) {
@@ -663,51 +619,91 @@ function findForestVars(steps) {
   }
   return out;
 }
+function findPointers(vars) {
+  return POINTER_NAMES.filter(n => Number.isInteger(vars[n]))
+    .map(name => ({ name, idx: vars[name] }));
+}
 
-/** What to draw for one variable, or null to leave it in the scalar chips. */
-function shapeOf(name, v) {
-  if (Array.isArray(v)) {
-    if (!v.length) return null;
-    if (graphVars.has(name)) return { kind: "graph", data: v };
-    if (treeVars.has(name)) return { kind: "tree", data: v };
-    if (forestVars.has(name)) return { kind: "forest", data: v };
-    if (v.every(row => Array.isArray(row) && row.every(x => typeof x === "number"))) return { kind: "matrix", data: v };
-    // Only tiny constant arrays (dr/dc offset tables) collapse to a box row —
-    // a constant array of 6+ numbers is usually the data being searched.
-    if (v.every(x => typeof x === "number") && !(constant.has(name) && v.length <= 4)
-        && !v.every(x => x === 0 || x === 1)) return { kind: "bars", data: v };
-    return { kind: "row", data: v };
+function unwrap(o) {
+  if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+  const box = v => (v && typeof v === "object" && "value" in v) ? v.value : v;
+  if (Array.isArray(o.elementData) && Number.isInteger(o.size)) return o.elementData.slice(0, o.size).map(box);
+  if (Array.isArray(o.elements) && Number.isInteger(o.head) && Number.isInteger(o.tail)) {
+    const n = o.elements.length, out = [];
+    for (let i = o.head; i !== o.tail; i = (i + 1) % n) out.push(box(o.elements[i]));
+    return out;
   }
-  // a one-character string is a value, not a sequence — leave it in the chips
-  if (typeof v === "string" && v.length > 1) return { kind: "row", data: [...v], label: "chuỗi / string" };
-  if (v && typeof v === "object" && ("left" in v || "right" in v)) {
-    const t = objTree(v);
-    if (t.nodes.length) return { kind: "nodes", data: t, label: "cây / tree" };
+  return null;
+}
+function unwrapList(o) {
+  if (!o || typeof o !== "object" || Array.isArray(o) || !("next" in o)) return null;
+  const key = ["val", "value", "data", "item"].find(k => k in o);
+  if (!key) return null;
+  const out = [];
+  for (let n = o; n && typeof n === "object" && key in n && out.length < 64; n = n.next) out.push(n[key]);
+  return out;
+}
+function unwrapMap(o) {
+  if (!o || typeof o !== "object" || Array.isArray(o) || !Array.isArray(o.table)) return null;
+  const pairs = [];
+  for (let node of o.table) {
+    while (node && typeof node === "object" && "key" in node) { pairs.push([node.key, node.value]); node = node.next; }
   }
-  const items = unwrap(v) || unwrapList(v);
-  if (items) return { kind: "row", data: items, label: typeName(v) };
-  const pairs = unwrapMap(v);
-  // map entries are keyed, not indexed: an `i`/`left` pointer means nothing here
-  if (pairs) return { kind: "row", data: pairs.map(([k, x]) => `${k}→${x}`), label: typeName(v), keyed: true };
+  return pairs;
+}
+function textOf(o) {
+  if (!o || typeof o !== "object" || !/StringBu/.test(String(o.__type))) return null;
+  if (!Array.isArray(o.value) || !Number.isInteger(o.count)) return null;
+  return o.value.slice(0, o.count).map(b => String.fromCharCode(b & 255)).join("");
+}
+const typeName = o => String(o.__type || "").replace(/.*\./, "");
+
+/** The design shows one figure per step; pick the structure the run is about. */
+function pickFigure(step) {
+  const vars = Object.entries(step.vars);
+  for (const [name, v] of vars) if (graphVars.has(name)) return { kind: "graph", name, data: v };
+  for (const [name, v] of vars) if (treeVars.has(name)) return { kind: "tree", name, data: v };
+  for (const [name, v] of vars) if (forestVars.has(name)) return { kind: "forest", name, data: v };
+  for (const [name, v] of vars) {
+    if (v && typeof v === "object" && !Array.isArray(v) && ("left" in v || "right" in v)) {
+      const t = objTree(v);
+      if (t.nodes.length) return { kind: "nodes", name, data: t };
+    }
+  }
+  for (const [name, v] of vars) {
+    if (Array.isArray(v) && v.length && v.every(r => Array.isArray(r) && r.every(x => typeof x === "number")))
+      return { kind: "table", name, data: v };
+  }
+  for (const [name, v] of vars) {
+    if (Array.isArray(v) && v.length && v.every(x => typeof x === "number")
+        && !(constant.has(name) && v.length <= 4)) return { kind: "bars", name, data: v };
+  }
+  for (const [name, v] of vars) {
+    if (typeof v === "string" && v.length > 1) return { kind: "linear", name, data: [...v] };
+    if (Array.isArray(v) && v.length) return { kind: "linear", name, data: v };
+    const items = unwrap(v) || unwrapList(v);
+    if (items && items.length) return { kind: "linear", name: name + " · " + typeName(v), data: items };
+    const pairs = unwrapMap(v);
+    if (pairs && pairs.length) return { kind: "linear", name: name + " · " + typeName(v),
+                                        data: pairs.map(([k, x]) => k + "→" + x) };
+  }
   return null;
 }
 
 /* ---------------- narration ---------------- */
 
-/** Describes what changed between two steps, in Vietnamese and English. */
 function describe(prev, step) {
   if (!prev) return { vi: "Bắt đầu chạy chương trình.", en: "Program starts." };
   if (step.stack.length > prev.stack.length)
-    return { vi: `Gọi hàm <code>${escapeHtml(step.method)}()</code>`, en: `Call ${step.method}()` };
+    return { vi: `Gọi hàm <code>${esc(step.method)}()</code>`, en: `Call ${step.method}()` };
   if (step.stack.length < prev.stack.length)
-    return { vi: `Trả về từ <code>${escapeHtml(prev.method)}()</code>`, en: `Return from ${prev.method}()` };
-
+    return { vi: `Trả về từ <code>${esc(prev.method)}()</code>`, en: `Return from ${prev.method}()` };
   const vi = [], en = [];
   for (const [name, now] of Object.entries(step.vars)) {
     const was = prev.vars[name];
     if (was === undefined) {
       if (!Array.isArray(now) && typeof now !== "object") {
-        vi.push(`Khai báo <code>${escapeHtml(name)} = ${escapeHtml(fmt(now))}</code>`);
+        vi.push(`Khai báo <code>${esc(name)} = ${esc(fmt(now))}</code>`);
         en.push(`declare ${name} = ${fmt(now)}`);
       }
       continue;
@@ -717,14 +713,14 @@ function describe(prev, step) {
       for (let i = 0; i < now.length; i++) if (JSON.stringify(now[i]) !== JSON.stringify(was[i])) moved.push(i);
       if (!moved.length) continue;
       if (moved.length === 2 && now[moved[0]] === was[moved[1]] && now[moved[1]] === was[moved[0]]) {
-        vi.push(`Hoán đổi <code>${escapeHtml(name)}[${moved[0]}] ↔ ${escapeHtml(name)}[${moved[1]}]</code>`);
+        vi.push(`Hoán đổi <code>${esc(name)}[${moved[0]}] ↔ ${esc(name)}[${moved[1]}]</code>`);
         en.push(`swap ${name}[${moved[0]}] ↔ ${name}[${moved[1]}]`);
       } else {
-        vi.push(moved.slice(0, 3).map(i => `<code>${escapeHtml(name)}[${i}] = ${escapeHtml(fmt(now[i]))}</code>`).join(", "));
+        vi.push(moved.slice(0, 3).map(i => `<code>${esc(name)}[${i}] = ${esc(fmt(now[i]))}</code>`).join(", "));
         en.push(moved.slice(0, 3).map(i => `${name}[${i}] = ${fmt(now[i])} (was ${fmt(was[i])})`).join(", "));
       }
     } else if (typeof now !== "object" && now !== was) {
-      vi.push(`<code>${escapeHtml(name)}: ${escapeHtml(fmt(was))} → ${escapeHtml(fmt(now))}</code>`);
+      vi.push(`<code>${esc(name)}: ${esc(fmt(was))} → ${esc(fmt(now))}</code>`);
       en.push(`${name}: ${fmt(was)} → ${fmt(now)}`);
     }
   }
@@ -737,306 +733,215 @@ function describe(prev, step) {
 function render() {
   const step = steps[at], prev = at > 0 ? steps[at - 1] : null;
   const pointers = findPointers(step.vars);
+  const figure = pickFigure(step);
 
-  status.textContent = window.truncated ? "CẮT BỚT / truncated" : "ok";
-  $("stepno").textContent = `step ${at + 1} / ${steps.length}`;
-  $("lineno").textContent = `dòng ${step.line}`;
-  scrub.value = at;
+  $("stepNo").textContent = `step ${at + 1} / ${steps.length}`;
+  $("scrub").value = at;
+  $("algoTitle").textContent = algo.toUpperCase()
+    + (figure ? " · " + figure.name + (figure.data.length ? " · n = " + figure.data.length : "") : "");
 
-  drawCode(step);
-  $("noteVi").innerHTML = notes[at].vi;
-  $("noteEn").textContent = notes[at].en;
-  drawLog();
+  const showVi = lang !== "en", showEn = lang !== "vi";
+  $("noteVi").innerHTML = showVi ? notes[at].vi : esc(notes[at].en);
+  $("noteEn").textContent = showVi && showEn ? notes[at].en : "";
 
-  // A pointer belongs to the array the running line actually indexes — without this,
-  // `head`/`tail` of a queue also land on every other array on screen.
-  const lineText = lines[step.line - 1] || "";
-  const indexed = Object.keys(step.vars).filter(n => new RegExp(`\\b${n}\\s*\\[`).test(lineText));
+  [...$("codeLines").children].forEach((el, i) => el.classList.toggle("on", i + 1 === step.line));
+  const hot = $("codeLines").querySelector(".on");
+  if (hot) hot.scrollIntoView({ block: "nearest", behavior: "smooth" });
 
-  const keep = new Set();
-  for (const [name, value] of Object.entries(step.vars)) {
-    const shape = shapeOf(name, value);
-    if (!shape) continue;
-    if (shape.kind === "graph") annotateGraph(shape, step);
-    const key = name + ":" + shape.kind;
-    keep.add(key);
-    let view = views.get(key);
-    if (!view || view.kind !== shape.kind) { view = makeView(name, shape.kind); views.set(key, view); }
-    stage.appendChild(view.el);          // appending an existing node just reorders it
-    view.update(shape, indexed.length && !indexed.includes(name) ? [] : pointers,
-                prev ? prev.vars[name] : undefined);
-  }
-  for (const [key, view] of views) if (!keep.has(key)) { view.el.remove(); views.delete(key); }
-  placeholder(stage, !keep.size, "Bước này chưa có cấu trúc dữ liệu nào trong tầm nhìn.");
-
-  drawVars(step, prev);
-  drawStack(step);
+  drawFigure(figure, step, prev, pointers);
+  drawVars(step, figure);
+  drawStats();
+  drawLog(showVi, showEn);
 }
 
-// per-node labels a graph algorithm keeps in a parallel array
-const SUB_NAMES = ["dist", "d", "done", "visited", "order", "color", "parent", "indegree", "seen"];
+function drawCode() {
+  $("codeLines").innerHTML = lines.map((t, i) =>
+    `<div><span class="n">${i + 1}</span><span class="t">${esc(t)}</span></div>`).join("");
+}
 
-/** Hangs dist[]/visited[] under the nodes so a graph run shows its progress. */
-function annotateGraph(shape, step) {
-  const n = shape.data.length;
+function drawFigure(figure, step, prev, pointers) {
+  const stage = $("stage");
+  if (!figure) {
+    stage.innerHTML = `<div class="linear"><div class="mono" style="opacity:.6">
+      Bước này chưa có cấu trúc dữ liệu nào trong tầm nhìn.</div></div>`;
+    views.clear();
+    return;
+  }
+  const key = figure.kind + ":" + figure.name;
+  if (views.get("key") !== key) { stage.innerHTML = ""; views.clear(); views.set("key", key); }
+  const before = prev ? prev.vars[figure.name] : undefined;
+
+  if (figure.kind === "bars") return drawBars(stage, figure.data, before, pointers);
+  if (figure.kind === "table") return drawTable(stage, figure.data, before);
+  if (figure.kind === "linear") return drawLinear(stage, figure.data, before, pointers);
+  const net = figure.kind === "graph" ? matrixGraph(figure.data, subLabels(step, figure.data.length))
+            : figure.kind === "tree" ? arrayTree(figure.data)
+            : figure.kind === "forest" ? parentForest(figure.data) : figure.data;
+  drawNet(stage, net, pointers.filter(p => NODE_POINTERS.includes(p.name)));
+}
+
+function subLabels(step, n) {
   const hit = Object.entries(step.vars).find(([k, v]) =>
     SUB_NAMES.includes(k) && Array.isArray(v) && v.length === n && v.every(x => typeof x === "number"));
-  if (!hit) return;
-  shape.subName = hit[0];
-  shape.sub = hit[1].map(x => (x < 0 || x >= 90) ? "∞" : String(x));
+  return hit ? hit[1].map(x => (x < 0 || x >= 90) ? "∞" : String(x)) : null;
 }
 
-function drawCode(step) {
-  if (codeview.childElementCount !== lines.length) {
-    codeview.innerHTML = lines.map((text, i) =>
-      `<div><span class="n">${i + 1}</span><span class="txt">${escapeHtml(text)}</span></div>`).join("");
+/* -- bars (design: value on top, 3px border, no bottom edge, gap 12/6) -- */
+function drawBars(stage, data, before, pointers) {
+  let bars = stage.querySelector(".bars");
+  if (!bars) {
+    stage.innerHTML = `<div class="bars"></div><div class="axis"></div>`;
+    bars = stage.querySelector(".bars");
   }
-  [...codeview.children].forEach((el, i) => el.classList.toggle("on", i + 1 === step.line));
-  const hot = codeview.querySelector(".on");
-  if (hot) hot.scrollIntoView({ block: "nearest", behavior: "smooth" });
-}
-
-function drawLog() {
-  const from = Math.max(0, at - 8);
-  $("log").innerHTML = steps.slice(from, at + 1).map((s, k) => {
-    const i = from + k;
-    return `<div class="${i === at ? "now" : ""}"><span class="n">${i + 1}</span>
-      <span class="vi">${notes[i].vi}<span class="en">${escapeHtml(notes[i].en)}</span></span></div>`;
-  }).join("");
-  $("log").scrollTop = $("log").scrollHeight;
-}
-
-function drawVars(step, prev) {
-  const scalars = Object.entries(step.vars)
-    .filter(([n, v]) => !shapeOf(n, v) && !(Array.isArray(v) && !v.length));
-  const wrap = $("vars");
-  placeholder(wrap, false);              // drop the placeholder before counting children
-  sync(wrap, scalars.length, () => {
-    const chip = document.createElement("div");
-    chip.className = "chip";
-    chip.innerHTML = `<span class="k"></span><span class="v"></span><div class="spark"></div>`;
-    return chip;
-  });
-  [...wrap.children].forEach((chip, i) => {
-    const [name, value] = scalars[i];
-    const was = prev ? prev.vars[name] : undefined;
-    chip.querySelector(".k").textContent = name;
-    chip.querySelector(".v").textContent = fmt(value);
-    if (was !== undefined && was !== value) flash(chip);
-    drawSpark(chip.querySelector(".spark"), name, value);
-  });
-  placeholder(wrap, !scalars.length, "—");
-}
-
-/** Adds or removes an empty-state note without disturbing the synced children. */
-function placeholder(container, show, text) {
-  const existing = container.querySelector(":scope > .empty");
-  if (!show) { if (existing) existing.remove(); return; }
-  if (existing) { existing.textContent = text; return; }
-  const el = document.createElement("div");
-  el.className = "empty mono";
-  el.style.opacity = ".55";
-  el.textContent = text;
-  container.appendChild(el);
-}
-
-function drawStack(step) {
-  $("stack").innerHTML = step.stack.map((f, i) =>
-    `<div>${i === 0 ? "▶ " : "&nbsp;&nbsp;"}${escapeHtml(f)}</div>`).join("");
-  $("output").innerHTML = window.stdout
-    ? `<div class="out-text">${escapeHtml(window.stdout.trim())}</div>` : "";
-}
-
-/** Every value this scalar has held so far — the only shape a scalar-only
- *  algorithm (gcd, fast power, prime check) has to show. */
-function drawSpark(el, name, value) {
-  if (typeof value !== "number") { el.innerHTML = ""; return; }
-  const history = [];
-  for (let s = 0; s <= at; s++) {
-    const v = steps[s].vars[name];
-    if (typeof v === "number" && v !== history[history.length - 1]) history.push(v);
-  }
-  if (history.length < 3) { el.innerHTML = ""; return; }
-  const recent = history.slice(-40);
-  const base = Math.min(0, ...recent), span = Math.max(...recent) - base || 1;
-  sync(el, recent.length, () => document.createElement("span"));
-  [...el.children].forEach((bar, i) => {
-    bar.style.height = Math.max(2, (recent[i] - base) / span * 100) + "%";
-    bar.title = recent[i];
-  });
-}
-
-/* ---------------- views (create once, update in place) ---------------- */
-
-function makeView(name, kind) {
-  const el = document.createElement("div");
-  el.className = "viz";
-  el.innerHTML = `<div class="viz-head"><b></b><span class="type"></span>
-                  <div class="legend"></div></div><div class="body-viz"></div>`;
-  el.querySelector("b").textContent = name;
-  const type = el.querySelector(".type"), legend = el.querySelector(".legend"),
-        body = el.querySelector(".body-viz");
-  const view = { el, kind, ptrs: new Map() };
-
-  view.update = (shape, pointers, before) => {
-    const data = shape.data;
-    type.textContent =
-        shape.kind === "graph" ? `đồ thị / graph · ${data.length} đỉnh${shape.subName ? ` · nhãn = ${shape.subName}` : ""}`
-      : shape.kind === "tree" ? `cây / tree · ${data.filter(v => v !== -1).length} đỉnh`
-      : shape.kind === "forest" ? `rừng / forest · ${data.filter((p, i) => p === i).length} gốc`
-      : shape.kind === "nodes" ? `${shape.label} · ${data.nodes.length} đỉnh`
-      : shape.kind === "matrix" ? `${data.length}×${data[0].length}`
-      : shape.label ? `${shape.label} · ${data.length}`
-      : `${data.length} phần tử`;
-
-    if (shape.kind === "matrix") { updateMatrix(body, data); legend.innerHTML = ""; return; }
-
-    if (shape.kind === "graph" || shape.kind === "tree" || shape.kind === "nodes"
-        || shape.kind === "forest") {
-      // an object tree has no index space, so no pointer can name one of its nodes
-      const count = shape.kind === "nodes" ? 0 : data.length;
-      // `left`/`right`/`lo`/`hi` bound array windows; on a node view they are
-      // values (a subtree height, a weight), not node ids — don't colour a node
-      const marks = pointers.filter(p =>
-        p.idx >= 0 && p.idx < count && NODE_POINTERS.includes(p.name));
-      legend.innerHTML = marks.map(p =>
-        `<span class="tag" style="background:${p.color};color:${POINTER_FG[p.color] || "var(--ink)"}">${escapeHtml(p.name)} = ${p.idx}</span>`).join("");
-      const net = shape.kind === "graph" ? matrixGraph(data, shape.sub)
-                : shape.kind === "tree" ? arrayTree(data)
-                : shape.kind === "forest" ? parentForest(data) : data;
-      updateNet(body, net, marks);
-      return;
-    }
-
-    const live = shape.keyed ? [] : pointers.filter(p => p.idx >= 0 && p.idx < data.length);
-    legend.innerHTML = live.map(p =>
-      `<span class="tag" style="background:${p.color};color:${POINTER_FG[p.color] || "var(--ink)"}">${escapeHtml(p.name)} = ${p.idx}</span>`).join("");
-
-    let from = 0, to = data.length - 1;
-    for (const [a, b] of WINDOWS) {
-      const pa = live.find(p => p.name === a), pb = live.find(p => p.name === b);
-      // once the two ends cross, the window is empty — dimming everything then
-      // just greys the whole row out, so drop it
-      if (pa && pb && pa.idx <= pb.idx) { from = pa.idx; to = pb.idx; break; }
-    }
-    const windowed = from > 0 || to < data.length - 1;
-    const isOut = i => windowed && (i < from || i > to);
-    (shape.kind === "bars" ? updateBars : updateRow)(body, data, before, isOut, live);
-    updateLane(view, body, live, data.length, shape.kind);
-  };
-  return view;
-}
-
-/** Bar chart. Baseline is 0, or the minimum when negatives are present. */
-function updateBars(body, data, before, isOut, live) {
-  let plot = body.querySelector(".plot");
-  if (!plot) {
-    body.innerHTML = `<div class="plot"></div><div class="axis"></div><div class="lane"></div>`;
-    plot = body.querySelector(".plot");
-  }
-  const axis = body.querySelector(".axis");
-  sync(plot, data.length, () => {
+  const axis = stage.querySelector(".axis");
+  const gap = data.length > 10 ? "6px" : "12px";
+  bars.style.gap = axis.style.gap = gap;
+  sync(bars, data.length, () => {
     const col = document.createElement("div");
-    col.className = "col-bar";
     col.innerHTML = `<div class="v"></div><div class="bar"></div>`;
     return col;
   });
   sync(axis, data.length, () => document.createElement("div"));
 
-  // an INF sentinel (999) would flatten every real value; scale without it and
-  // draw those bars empty, labelled ∞
   const real = data.filter(v => v < 90);
   const infinite = real.length && real.length < data.length;
   const base = Math.min(0, ...(infinite ? real : data));
   const span = Math.max(...(infinite ? real : data)) - base || 1;
-  const hit = new Set(live.map(p => p.idx));
-  [...plot.children].forEach((col, i) => {
-    const v = data[i], bar = col.querySelector(".bar"), isInf = infinite && v >= 90;
-    col.title = `[${i}] = ${v}`;
-    col.classList.toggle("out", isOut(i));
-    bar.style.height = isInf ? "100%" : Math.max(3, (v - base) / span * 92) + "%";
-    bar.style.background = isInf ? "var(--paper)" : hit.has(i) ? "var(--orange)" : "var(--yellow)";
+  const hit = new Set(pointers.map(p => p.idx));
+  [...bars.children].forEach((col, i) => {
+    const v = data[i], isInf = infinite && v >= 90;
+    const changed = Array.isArray(before) && before[i] !== undefined && before[i] !== v;
     col.querySelector(".v").textContent = data.length <= 30 ? (isInf ? "∞" : v) : "";
-    if (Array.isArray(before) && before[i] !== undefined && before[i] !== v) {
-      bar.style.background = "var(--lime)";
-      flash(col);
-    }
+    const bar = col.querySelector(".bar");
+    bar.style.height = isInf ? "100%" : Math.max(3, (v - base) / span * 92) + "%";
+    bar.style.background = changed ? PAL.swap : hit.has(i) ? PAL.cmp : isInf ? "var(--paper)" : PAL.base;
+    col.title = `[${i}] = ${v}`;
     axis.children[i].textContent = i;
   });
 }
 
-/** Fixed-pitch boxes: characters, 0/1 flags, constants, collection contents. */
-function updateRow(body, data, before, isOut, live) {
-  let row = body.querySelector(".row");
-  if (!row) {
-    body.innerHTML = `<div class="seq"><div class="row"></div><div class="lane"></div></div>`;
-    row = body.querySelector(".row");
-  }
-  const wide = data.some(v => String(fmt(v)).length > 3);
-  const hit = new Set(live.map(p => p.idx));
-  sync(row, data.length, () => {
-    const box = document.createElement("div");
-    box.innerHTML = `<span class="v"></span><small></small>`;
-    return box;
+/* -- DP table (design: header row + row labels, 52×46 cells) -- */
+function drawTable(stage, rows, before) {
+  let wrap = stage.querySelector(".tablewrap");
+  if (!wrap) { stage.innerHTML = `<div class="tablewrap"><div></div></div>`; wrap = stage.querySelector(".tablewrap"); }
+  const grid = wrap.firstElementChild;
+  const cols = rows[0].length;
+  const wide = cols > 10 || rows.length > 10;
+  const cw = wide ? "40px" : "52px", ch = wide ? "38px" : "46px";
+
+  sync(grid, rows.length + 1, () => document.createElement("div"));
+  const head = grid.children[0];
+  head.className = "trow";
+  sync(head, cols + 1, () => {
+    const d = document.createElement("div");
+    d.className = "thead";
+    return d;
   });
-  [...row.children].forEach((box, i) => {
+  [...head.children].forEach((cell, c) => {
+    cell.style.width = cw;
+    cell.textContent = c === 0 ? "" : c - 1;
+  });
+
+  rows.forEach((row, r) => {
+    const line = grid.children[r + 1];
+    line.className = "trow";
+    sync(line, cols + 1, () => document.createElement("div"));
+    [...line.children].forEach((cell, c) => {
+      if (c === 0) {
+        cell.className = "thead";
+        cell.style.width = cw;
+        cell.textContent = r;
+        return;
+      }
+      const v = row[c - 1];
+      const was = Array.isArray(before) && before[r] ? before[r][c - 1] : undefined;
+      const changed = was !== undefined && was !== v;
+      cell.className = "tcell";
+      cell.style.width = cw;
+      cell.style.height = ch;
+      cell.style.background = changed ? PAL.cmp : v ? "var(--soft)" : "#fff";
+      cell.style.color = changed ? "#fff" : "var(--ink)";
+      cell.textContent = v >= 90 ? "∞" : v;
+    });
+  });
+}
+
+/* -- linear cells (design: 78px boxes with a tag underneath) -- */
+function drawLinear(stage, data, before, pointers) {
+  let set = stage.querySelector(".set");
+  if (!set) { stage.innerHTML = `<div class="linear"><div class="set"></div></div>`; set = stage.querySelector(".set"); }
+  sync(set, data.length, () => {
+    const item = document.createElement("div");
+    item.className = "item";
+    item.innerHTML = `<div class="box"></div><div class="tag"></div>`;
+    return item;
+  });
+  const byIndex = new Map();
+  for (const p of pointers) (byIndex.get(p.idx) || byIndex.set(p.idx, []).get(p.idx)).push(p.name);
+  [...set.children].forEach((item, i) => {
     const v = data[i];
-    const text = v === " " ? "␣" : fmt(v);   // an empty box reads as a bug, not a space
-    box.className = "box" + (wide ? " wide" : "");
-    box.classList.toggle("on", v === 1 || v === true || hit.has(i));
-    box.classList.toggle("out", isOut(i));
-    box.querySelector(".v").textContent = text;
-    box.querySelector("small").textContent = i;
-    box.title = `[${i}] = ${text}`;
-    if (Array.isArray(before) && before[i] !== undefined && before[i] !== v) flash(box);
+    const text = v === " " ? "␣" : fmt(v);
+    const changed = Array.isArray(before) && before[i] !== undefined
+                    && JSON.stringify(before[i]) !== JSON.stringify(v);
+    const names = byIndex.get(i);
+    const box = item.querySelector(".box");
+    box.textContent = text;
+    box.style.background = changed ? PAL.swap : names ? PAL.cmp : v === 1 || v === true ? PAL.done : "#fff";
+    box.style.color = (changed || names) ? "#fff" : "var(--ink)";
+    item.querySelector(".tag").textContent = names ? names.join(" ") : String(i);
   });
 }
 
-/** One persistent chip per pointer, slid to its column with a transform. */
-function updateLane(view, body, live, count, kind) {
-  const lane = body.querySelector(".lane");
-  const track = body.querySelector(kind === "bars" ? ".plot" : ".row");
-  // Measure the real column: bars are flex items capped at max-width, so
-  // clientWidth / count overshoots and the chips drift right of their bar.
-  const origin = lane.getBoundingClientRect().left;
-
-  const stackedAt = new Map();          // two pointers on one index stack instead of overlapping
-  for (const p of live) {
-    const column = track.children[p.idx];
-    if (!column) continue;
-    const box = column.getBoundingClientRect();
-    const rank = stackedAt.get(p.idx) || 0;
-    stackedAt.set(p.idx, rank + 1);
-    let chip = view.ptrs.get(p.name);
-    if (!chip) {
-      chip = document.createElement("span");
-      chip.className = "ptr";
-      chip.style.opacity = "0";
-      lane.appendChild(chip);
-      view.ptrs.set(p.name, chip);
-    }
-    chip.textContent = p.name;
-    chip.style.background = p.color;
-    chip.style.color = POINTER_FG[p.color] || "var(--ink)";
-    chip.style.width = Math.max(box.width, 24) + "px";
-    chip.style.transform = `translate(${box.left - origin}px, ${rank * 20}px)`;
-    chip.style.opacity = "1";
-  }
-  lane.style.height = 22 * Math.max(1, ...stackedAt.values()) + "px";
-  const names = new Set(live.map(p => p.name));
-  for (const [name, chip] of view.ptrs) if (!names.has(name)) chip.style.opacity = "0";
-}
-
-/* ---------------- node-link views ---------------- */
-
-const SVG_W = 1000, SVG_H = 460, NS = "http://www.w3.org/2000/svg";
-const svg = (tag, attrs) => {
+/* -- node-link (design: r=32 circles, weight boxes, 1000×500 viewBox) -- */
+const SVG_W = 1000, SVG_H = 500, NS = "http://www.w3.org/2000/svg";
+const svgEl = (tag, attrs) => {
   const el = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
   return el;
 };
 
-/** Object tree (Node with left/right) laid out in-order: x = visit order, y = depth. */
+function circleNodes(n, sub) {
+  const radius = Math.min(SVG_W, SVG_H) / 2 - 70;
+  return Array.from({ length: n }, (_, i) => {
+    const angle = -Math.PI / 2 + i * 2 * Math.PI / n;
+    return { index: i, label: i, sub: sub ? sub[i] : "",
+             x: SVG_W / 2 + radius * Math.cos(angle) * 1.7, y: SVG_H / 2 + radius * Math.sin(angle) };
+  });
+}
+function matrixGraph(m, sub) {
+  const n = m.length, nodes = circleNodes(n, sub), flat = m.flat();
+  const max = Math.max(...flat), sentinel = max >= 90 ? max : Infinity;
+  const weighted = flat.some(v => v !== 0 && v !== sentinel && v !== 1);
+  const symmetric = m.every((row, i) => row.every((v, j) => v === m[j][i]));
+  const edges = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = symmetric ? i + 1 : 0; j < n; j++) {
+      const w = m[i][j];
+      if (i === j || w === 0 || w === sentinel) continue;
+      edges.push({ from: i, to: j, label: weighted ? w : "", directed: !symmetric });
+    }
+  }
+  return { nodes, edges };
+}
+function parentForest(a) {
+  const edges = [];
+  a.forEach((p, i) => { if (p !== i) edges.push({ from: i, to: p, label: "", directed: true }); });
+  return { nodes: circleNodes(a.length, a.map((p, i) => p === i ? "root" : "")), edges };
+}
+function arrayTree(a) {
+  const nodes = [], edges = [], byIndex = new Map();
+  a.forEach((v, i) => {
+    if (v === -1) return;
+    const depth = Math.floor(Math.log2(i + 1)), per = 2 ** depth;
+    byIndex.set(i, nodes.length);
+    nodes.push({ index: i, label: v, sub: "#" + i, x: (i - per + 1 + 0.5) / per * SVG_W, y: 70 + depth * 115 });
+  });
+  a.forEach((v, i) => {
+    const parent = Math.floor((i - 1) / 2);
+    if (i > 0 && byIndex.has(i) && byIndex.has(parent)) edges.push({ from: byIndex.get(parent), to: byIndex.get(i), label: "" });
+  });
+  return { nodes, edges };
+}
 function objTree(root) {
   const nodes = [], edges = [];
   let column = 0;
@@ -1048,185 +953,135 @@ function objTree(root) {
     const id = nodes.length;
     nodes.push({ label: fmt(n[key]), column: column++, depth });
     const r = walk(n.right, depth + 1);
-    if (l >= 0) edges.push([id, l]);
-    if (r >= 0) edges.push([id, r]);
+    if (l >= 0) edges.push({ from: id, to: l, label: "" });
+    if (r >= 0) edges.push({ from: id, to: r, label: "" });
     return id;
   })(root, 0);
   const span = Math.max(1, column);
-  nodes.forEach(n => { n.x = (n.column + 0.5) / span * SVG_W; n.y = 60 + n.depth * 110; });
+  nodes.forEach(n => { n.x = (n.column + 0.5) / span * SVG_W; n.y = 70 + n.depth * 115; });
   return { nodes, edges };
 }
 
-/** Heap-encoded tree: children of i are 2i+1 / 2i+2, -1 marks an empty slot. */
-function arrayTree(a) {
-  const nodes = [], edges = [], byIndex = new Map();
-  a.forEach((v, i) => {
-    if (v === -1) return;
-    const depth = Math.floor(Math.log2(i + 1));
-    const perLevel = 2 ** depth, slot = i - (perLevel - 1);
-    byIndex.set(i, nodes.length);
-    nodes.push({ index: i, label: v, sub: `#${i}`, depth,
-                 x: (slot + 0.5) / perLevel * SVG_W, y: 60 + depth * 110 });
-  });
-  a.forEach((v, i) => {
-    const parent = Math.floor((i - 1) / 2);
-    if (i > 0 && byIndex.has(i) && byIndex.has(parent)) edges.push([byIndex.get(parent), byIndex.get(i)]);
-  });
-  return { nodes, edges };
-}
-
-/** n nodes evenly spaced on an ellipse. */
-function circleNodes(n, sub) {
-  const radius = Math.min(SVG_W, SVG_H) / 2 - 60;
-  return Array.from({ length: n }, (_, i) => {
-    const angle = -Math.PI / 2 + i * 2 * Math.PI / n;
-    return { index: i, label: i, sub: sub ? sub[i] : "",
-             x: SVG_W / 2 + radius * Math.cos(angle) * 1.7, y: SVG_H / 2 + radius * Math.sin(angle) };
-  });
-}
-
-/** parent[] as a forest: an arrow from each node to its parent, roots have none. */
-function parentForest(a) {
-  const edges = [];
-  a.forEach((p, i) => { if (p !== i) edges.push({ from: i, to: p, label: "", directed: true }); });
-  return { nodes: circleNodes(a.length, a.map((p, i) => p === i ? "root" : "")), edges };
-}
-
-/** Adjacency/weight matrix -> nodes on a circle, edges labelled with the weight. */
-function matrixGraph(m, sub) {
-  const n = m.length;
-  const nodes = circleNodes(n, sub);
-  const flat = m.flat();
-  const max = Math.max(...flat);
-  const sentinel = max >= 90 ? max : Infinity;      // INF placeholders are not edges
-  const weighted = flat.some(v => v !== 0 && v !== sentinel && v !== 1);
-  const symmetric = m.every((row, i) => row.every((v, j) => v === m[j][i]));
-
-  const edges = [];
-  for (let i = 0; i < n; i++) {
-    for (let j = symmetric ? i + 1 : 0; j < n; j++) {
-      const w = m[i][j];
-      if (i === j || w === 0 || w === sentinel) continue;
-      edges.push({ from: i, to: j, label: weighted ? w : "", directed: !symmetric });
-    }
-  }
-  return { nodes, edges };
-}
-
-/** Draws either shape. Nodes and edges are kept across steps so fills animate. */
-function updateNet(body, net, live) {
-  let root = body.querySelector("svg");
+function drawNet(stage, net, pointers) {
+  let root = stage.querySelector("svg");
   if (!root) {
-    body.innerHTML = "";
-    root = svg("svg", { viewBox: `0 0 ${SVG_W} ${SVG_H}`, class: "netsvg" });
-    root.appendChild(svg("g", { class: "edges" }));
-    root.appendChild(svg("g", { class: "nodes" }));
-    body.appendChild(root);
+    stage.innerHTML = `<div class="netwrap"></div>`;
+    root = svgEl("svg", { viewBox: `0 0 ${SVG_W} ${SVG_H}` });
+    root.appendChild(svgEl("g", { class: "edges" }));
+    root.appendChild(svgEl("g", { class: "nodes" }));
+    stage.firstElementChild.appendChild(root);
   }
   const edgeLayer = root.querySelector(".edges"), nodeLayer = root.querySelector(".nodes");
-  const hit = new Map();                      // node index -> pointer sitting on it
-  for (const p of live) if (!hit.has(p.idx)) hit.set(p.idx, p);
+  const hit = new Map();
+  for (const p of pointers) if (!hit.has(p.idx)) hit.set(p.idx, p);
 
   sync(edgeLayer, net.edges.length, () => {
-    const g = svg("g", {});
-    g.appendChild(svg("line", { stroke: "#101010", "stroke-width": 4, "stroke-linecap": "round" }));
-    g.appendChild(svg("rect", { fill: "#fff", stroke: "#101010", "stroke-width": 3, height: 26 }));
-    g.appendChild(svg("text", { "font-family": "JetBrains Mono, monospace", "font-size": 15,
-                                "font-weight": 700, "text-anchor": "middle", fill: "#101010" }));
+    const g = svgEl("g", {});
+    g.appendChild(svgEl("line", { stroke: "#101010", "stroke-width": 4, "stroke-linecap": "round" }));
+    g.appendChild(svgEl("rect", { fill: "#fff", stroke: "#101010", "stroke-width": 3, height: 26 }));
+    g.appendChild(svgEl("text", { "font-family": "JetBrains Mono, monospace", "font-size": 17,
+                                  "font-weight": 700, "text-anchor": "middle", fill: "#101010" }));
     return g;
   });
   [...edgeLayer.children].forEach((g, k) => {
-    const e = net.edges[k];
-    const [a, b] = Array.isArray(e) ? [net.nodes[e[0]], net.nodes[e[1]]]
-                                    : [net.nodes[e.from], net.nodes[e.to]];
-    const label = Array.isArray(e) ? "" : String(e.label ?? "");
-    // directed pairs get a small perpendicular offset so both arrows stay readable
-    const directed = !Array.isArray(e) && e.directed;
-    const shift = directed ? 12 : 0;
+    const e = net.edges[k], a = net.nodes[e.from], b = net.nodes[e.to];
+    const label = String(e.label ?? "");
+    const shift = e.directed ? 12 : 0, trim = e.directed ? 38 : 0;
     const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
     const ox = -dy / len * shift, oy = dx / len * shift;
-    // stop the line short of the target circle so the arrowhead stays visible
-    const trim = directed ? 36 : 0;
     const [line, rect, text] = g.children;
     line.setAttribute("x1", a.x + ox); line.setAttribute("y1", a.y + oy);
     line.setAttribute("x2", b.x + ox - dx / len * trim);
     line.setAttribute("y2", b.y + oy - dy / len * trim);
-    line.setAttribute("marker-end", directed ? "url(#arrow)" : "");
-    // labels sit off-centre: every edge crossing the middle would otherwise
-    // stack its weight box on the same spot, and a directed pair on two
-    const t = directed ? 0.32 : 0.4;
+    line.setAttribute("marker-end", e.directed ? "url(#arrow)" : "");
+    const t = e.directed ? 0.32 : 0.4;                 // keep labels off the crowded midpoint
     const mx = a.x + dx * t + ox, my = a.y + dy * t + oy;
-    const width = 18 + label.length * 11;
-    rect.setAttribute("x", mx - width / 2); rect.setAttribute("y", my - 13);
-    rect.setAttribute("width", width);
-    text.setAttribute("x", mx); text.setAttribute("y", my + 5);
+    const w = 20 + label.length * 12;
+    rect.setAttribute("x", mx - w / 2); rect.setAttribute("y", my - 13); rect.setAttribute("width", w);
+    text.setAttribute("x", mx); text.setAttribute("y", my + 6);
     text.textContent = label;
     rect.style.display = text.style.display = label ? "" : "none";
   });
 
   sync(nodeLayer, net.nodes.length, () => {
-    const g = svg("g", {});
-    g.appendChild(svg("circle", { r: 30, stroke: "#101010", "stroke-width": 4 }));
-    g.appendChild(svg("text", { "font-family": "Space Grotesk, Helvetica, sans-serif", "font-size": 22,
-                                "font-weight": 700, "text-anchor": "middle" }));
-    g.appendChild(svg("text", { "font-family": "JetBrains Mono, monospace", "font-size": 14,
-                                "font-weight": 700, "text-anchor": "middle", fill: "#101010" }));
+    const g = svgEl("g", {});
+    g.appendChild(svgEl("circle", { r: 32, stroke: "#101010", "stroke-width": 4 }));
+    g.appendChild(svgEl("text", { "font-family": "Space Grotesk, Helvetica, sans-serif", "font-size": 24,
+                                  "font-weight": 700, "text-anchor": "middle" }));
+    g.appendChild(svgEl("text", { "font-family": "JetBrains Mono, monospace", "font-size": 16,
+                                  "font-weight": 700, "text-anchor": "middle", fill: "#101010" }));
     return g;
   });
   [...nodeLayer.children].forEach((g, k) => {
-    const n = net.nodes[k];
-    const p = n.index !== undefined ? hit.get(n.index) : undefined;
+    const n = net.nodes[k], p = n.index !== undefined ? hit.get(n.index) : undefined;
     const [circle, label, sub] = g.children;
     circle.setAttribute("cx", n.x); circle.setAttribute("cy", n.y);
-    circle.setAttribute("fill", p ? p.color : "var(--yellow)");
+    circle.setAttribute("fill", p ? PAL.cmp : PAL.base);
     label.setAttribute("x", n.x); label.setAttribute("y", n.y + 8);
-    label.setAttribute("fill", p && POINTER_FG[p.color] ? POINTER_FG[p.color] : "#101010");
+    label.setAttribute("fill", p ? "#fff" : "#101010");
     label.textContent = n.label;
-    sub.setAttribute("x", n.x); sub.setAttribute("y", n.y + 52);
+    sub.setAttribute("x", n.x); sub.setAttribute("y", n.y + 56);
     sub.textContent = [p && p.name, n.sub].filter(Boolean).join(" · ");
   });
 }
 
-function updateMatrix(body, data) {
-  let grid = body.querySelector(".matrix");
-  if (!grid) { body.innerHTML = `<div class="matrix"></div>`; grid = body.querySelector(".matrix"); }
-  grid.style.gridTemplateColumns = `repeat(${data[0].length}, 38px)`;
-  const flat = data.flat(), lo = Math.min(...flat), hi = Math.max(...flat);
-  sync(grid, flat.length, () => {
-    const cell = document.createElement("div");
-    cell.className = "mcell";
-    return cell;
+/* -- variables, stats, log -- */
+
+function drawVars(step, figure) {
+  const set = $("vars");
+  const shown = Object.entries(step.vars)
+    .filter(([n, v]) => !(figure && n === figure.name) && !(Array.isArray(v) && !v.length));
+  sync(set, shown.length, () => {
+    const chip = document.createElement("div");
+    chip.className = "chip";
+    chip.innerHTML = `<span></span> <b></b>`;
+    return chip;
   });
-  [...grid.children].forEach((cell, n) => {
-    const v = flat[n];
-    if (cell.textContent !== String(v)) flash(cell);
-    cell.textContent = v;
-    cell.style.background = ramp(v, lo, hi);
-    cell.style.color = (v - lo) / (hi - lo || 1) > 0.62 ? "#fff" : "var(--ink)";
-    cell.title = `[${Math.floor(n / data[0].length)}][${n % data[0].length}] = ${v}`;
+  [...set.children].forEach((chip, i) => {
+    const [name, value] = shown[i];
+    chip.querySelector("span").textContent = name + " =";
+    chip.querySelector("b").textContent = fmt(value);
   });
+  if (!shown.length) set.innerHTML = `<div class="chip"><span>—</span></div>`;
+}
+
+function drawStats() {
+  let writes = 0;
+  for (let s = 1; s <= at; s++) {
+    for (const [k, v] of Object.entries(steps[s].vars)) {
+      const was = steps[s - 1].vars[k];
+      if (Array.isArray(v) && Array.isArray(was)) {
+        for (let i = 0; i < v.length; i++) if (JSON.stringify(v[i]) !== JSON.stringify(was[i])) writes++;
+      }
+    }
+  }
+  const [avg, space] = COMPLEXITY[algo] || ["—", "—"];
+  const depth = Math.max(...steps.slice(0, at + 1).map(s => s.stack.length));
+  const cells = [["BƯỚC / STEPS", at + 1], ["LẦN GHI / WRITES", writes],
+                 ["TRUNG BÌNH / AVERAGE", avg], ["BỘ NHỚ / SPACE", space],
+                 ["ĐỘ SÂU / DEPTH", depth], ["TỔNG BƯỚC / TOTAL", steps.length]];
+  $("stats").innerHTML = cells.map(([k, v]) =>
+    `<div class="box"><div class="k">${k}</div><div class="v">${esc(String(v))}</div></div>`).join("");
+}
+
+function drawLog(showVi, showEn) {
+  const from = Math.max(0, at - 8);
+  $("log").innerHTML = steps.slice(from, at + 1).map((s, k) => {
+    const i = from + k;
+    const vi = showVi ? notes[i].vi : esc(notes[i].en);
+    const en = showVi && showEn ? `<span class="en">${esc(notes[i].en)}</span>` : "";
+    return `<div class="${i === at ? "now" : ""}"><span class="n">${i + 1}</span>
+      <span class="vi">${vi}${en}</span></div>`;
+  }).join("");
+  $("log").scrollTop = $("log").scrollHeight;
 }
 
 /* ---------------- helpers ---------------- */
 
-/** Grows/shrinks a container to exactly n children, reusing the existing ones. */
 function sync(container, n, factory) {
   while (container.childElementCount > n) container.lastElementChild.remove();
   while (container.childElementCount < n) container.appendChild(factory());
 }
-
-function flash(el) {
-  el.animate([{ transform: "translateY(-5px)" }, { transform: "none" }],
-             { duration: Math.min(delay * 0.7, 350), easing: "cubic-bezier(.4,0,.2,1)" });
-}
-
-// paper -> yellow -> orange -> blue: one ordered ramp, dark end reads as "big"
-function ramp(v, lo, hi) {
-  const steps = ["#FFF6E5", "#FFEFB8", "#FFD84D", "#FFA53D", "#FF6B4A", "#8C63FF", "#2B4EFF"];
-  if (hi === lo) return steps[2];
-  return steps[Math.round((v - lo) / (hi - lo) * (steps.length - 1))];
-}
-
 function fmt(v) {
   if (v === null) return "null";
   if (typeof v !== "object") return String(v);
@@ -1234,8 +1089,8 @@ function fmt(v) {
   if (text !== null) return `"${text}"`;
   return Array.isArray(v) ? JSON.stringify(v) : typeName(v) || "object";
 }
-function escapeHtml(s) {
-  return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
 buildHome();
