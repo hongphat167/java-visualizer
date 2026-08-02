@@ -27,7 +27,12 @@ Open <http://127.0.0.1:8088>, pick an algorithm from the catalog, and press play
 ```bash
 java Visualizer.java 9000     # listen on a different port
 java Visualizer.java --selftest   # compile + trace a bubble sort, assert the result
+node audit.js                 # server must be up: checks every algorithm's view
 ```
+
+`audit.js` loads the page's own decision layer with a DOM stub and traces all 54
+algorithms: it fails if a view does not match its declaration in `presets.js`,
+changes shape mid-run, has no data, or throws on any step.
 
 > **Security:** this compiles and executes arbitrary user-submitted Java in a
 > child JVM with **no sandbox**. It binds to `127.0.0.1` only and caps each run
@@ -59,6 +64,12 @@ Playback: step forward/back, jump to first/last, scrub to any step, play at
 0.5× / 1× / 2× / 4×.
 
 ### The figure adapts to the data
+
+Which view an algorithm gets is **declared** in `VIEW` (`presets.js`), the way
+the design pins `META.kind`: bars belong to the sorts and to linear/binary
+search, everything else is a graph, tree, forest, DP table, board, stack, queue
+or a row of cells. The table below is how a value is drawn once its view is
+known — and the fallback for code you paste yourself.
 
 | Value in scope | Rendered as |
 | --- | --- |

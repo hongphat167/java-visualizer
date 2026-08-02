@@ -608,7 +608,7 @@ async function build() {
     treeVars = findTreeVars(steps);
     forestVars = findForestVars(steps);
     roles = findRoles(steps);
-    figureSpec = chooseFigure(steps);
+    figureSpec = resolveFigure(steps);
     carried = null;
     notes = steps.map((s, i) => describe(i > 0 ? steps[i - 1] : null, s));
     $("scrub").max = steps.length - 1;
@@ -767,6 +767,46 @@ function kindOf(name, v) {
 const KIND_RANK = { graph: 0, tree: 1, forest: 2, nodes: 3, table: 4,
                     stack: 4.5, queue: 4.5, bars: 5, linear: 6 };
 
+/** Can this variable serve the declared view? */
+function fitsKind(kind, name, v) {
+  const own = kindOf(name, v);
+  if (kind === "table") return Array.isArray(v) && v.length
+    && (Array.isArray(v[0]) ? v[0].every(x => typeof x === "number")
+                            : v.every(x => typeof x === "number"));
+  if (kind === "linear") return own === "linear" || own === "bars" || own === "stack" || own === "queue";
+  if (kind === "tree") return own === "tree" || own === "nodes";
+  return own === kind;
+}
+
+/** The declared view wins; detection is only the fallback for edited code. */
+function resolveFigure(steps) {
+  const decl = VIEW[algo];
+  const kind = typeof decl === "string" ? decl : decl && decl.kind;
+  if (kind === "none") return null;
+  if (decl && decl.rows) return { kind: "rows", names: decl.rows, name: decl.rows[0] };
+  if (decl && decl.var) return { kind: kind, name: decl.var };
+  if (kind) {
+    const counts = new Map();
+    for (const s of steps) {
+      for (const [name, v] of Object.entries(s.vars)) {
+        if (!fitsKind(kind, name, v)) continue;
+        if (kind === "stack" || kind === "queue") {
+          const live = liveSlice(name, v, s);
+          if (!Array.isArray(live) || !live.length) continue;
+        }
+        const e = counts.get(name) || { name, count: 0, twoD: false, named: /^(dp|memo|table)$/.test(name) };
+        e.count++;
+        if (Array.isArray(v) && Array.isArray(v[0])) e.twoD = true;
+        counts.set(name, e);
+      }
+    }
+    const best = [...counts.values()].sort((a, b) =>
+      (b.twoD - a.twoD) || (b.named - a.named) || (b.count - a.count))[0];
+    if (best) return { kind, name: best.name };
+  }
+  return chooseFigure(steps);       // user pasted their own code, or nothing matched
+}
+
 function chooseFigure(steps) {
   const seen = new Map();
   for (const s of steps) {
@@ -794,11 +834,25 @@ function chooseFigure(steps) {
  *  variable is out of scope so the view never blanks out mid-run. */
 function figureData(step) {
   if (!figureSpec) return null;
+  if (figureSpec.kind === "rows") {                    // design's snapGrid: named rows
+    const rows = figureSpec.names.map(n => {
+      const v = step.vars[n];
+      return typeof v === "string" ? [...v] : Array.isArray(v) ? v : null;
+    });
+    return rows.every(Boolean) ? rows : null;
+  }
+  if (figureSpec.kind === "board") {                   // queen[row] = column -> n x n board
+    const pos = step.vars[figureSpec.name];
+    if (!Array.isArray(pos)) return null;
+    const n = pos.length;
+    return pos.map(c => Array.from({ length: n }, (_, j) => (j === c ? 1 : 0)));
+  }
   const raw = step.vars[figureSpec.name];
   if (raw !== undefined) carried = raw;
   const v = carried;
   if (v === undefined || v === null) return null;
-  if (figureSpec.kind === "nodes") {
+  if (figureSpec.kind === "nodes"
+      || (figureSpec.kind === "tree" && v && typeof v === "object" && !Array.isArray(v))) {
     const t = objTree(v);
     return t.nodes.length ? t : null;
   }
@@ -909,12 +963,19 @@ function drawFigure(figure, step, prev, pointers) {
   const before = prev ? prev.vars[figure.name] : undefined;
 
   if (figure.kind === "bars") return drawBars(stage, figure.data, before, pointers);
-  if (figure.kind === "table") return drawTable(stage, figure.data, before);
+  if (figure.kind === "rows") return drawTable(stage, figure.data, before, figureSpec.names);
+  if (figure.kind === "board") return drawTable(stage, figure.data, before, null, true);
+  if (figure.kind === "table") {
+    // a 1-D dp array is one row, exactly as the design shows LIS / Coin Change
+    const rows = Array.isArray(figure.data[0]) ? figure.data : [figure.data];
+    return drawTable(stage, rows, Array.isArray(before) && !Array.isArray(before[0]) ? [before] : before,
+                     Array.isArray(figure.data[0]) ? null : [figure.name]);
+  }
   if (figure.kind === "linear") return drawLinear(stage, figure.data, before, pointers, null);
   if (figure.kind === "stack") return drawLinear(stage, figure.data, before, [], "stack");
   if (figure.kind === "queue") return drawLinear(stage, figure.data, before, [], "queue");
   const net = figure.kind === "graph" ? matrixGraph(figure.data, subLabels(step, figure.data.length))
-            : figure.kind === "tree" ? arrayTree(figure.data)
+            : figure.kind === "tree" ? (Array.isArray(figure.data) ? arrayTree(figure.data) : figure.data)
             : figure.kind === "forest" ? parentForest(figure.data) : figure.data;
   drawNet(stage, net, pointers.filter(p => NODE_POINTERS.includes(p.name)));
 }
@@ -960,7 +1021,7 @@ function drawBars(stage, data, before, pointers) {
 }
 
 /* -- DP table (design: header row + row labels, 52×46 cells) -- */
-function drawTable(stage, rows, before) {
+function drawTable(stage, rows, before, labels, board) {
   let wrap = stage.querySelector(".tablewrap");
   if (!wrap) { stage.innerHTML = `<div class="tablewrap"><div></div></div>`; wrap = stage.querySelector(".tablewrap"); }
   const grid = wrap.firstElementChild;
@@ -989,7 +1050,7 @@ function drawTable(stage, rows, before) {
       if (c === 0) {
         cell.className = "thead";
         cell.style.width = cw;
-        cell.textContent = r;
+        cell.textContent = labels ? labels[r] : r;
         return;
       }
       const v = row[c - 1];
@@ -998,9 +1059,9 @@ function drawTable(stage, rows, before) {
       cell.className = "tcell";
       cell.style.width = cw;
       cell.style.height = ch;
-      cell.style.background = changed ? PAL.cmp : v ? "var(--soft)" : "#fff";
+      cell.style.background = changed ? PAL.cmp : v ? (board ? PAL.base : "var(--soft)") : "#fff";
       cell.style.color = changed ? "#fff" : "var(--ink)";
-      cell.textContent = v >= 90 ? "∞" : v;
+      cell.textContent = board ? (v ? "♛" : "") : v >= 90 ? "∞" : v;
     });
   });
 }

@@ -1052,3 +1052,73 @@ const CATS = [
   ["Backtracking", "Đệ quy / Backtracking"],
   ["Math", "Toán / Math"]
 ];
+
+// The design pins a view per algorithm (META.kind), and only the sorts plus
+// linear/binary search use bars. Everything else gets graph / tree / table /
+// linear / stack / queue. Entries may name the rows of a table explicitly.
+const VIEW = {
+  "Bubble sort": "bars",
+  "Selection sort": "bars",
+  "Insertion sort": "bars",
+  "Merge sort": "bars",
+  "Quick sort (Lomuto)": "bars",
+  "Heap sort": "bars",
+  "Counting sort": "bars",
+
+  "Linear search": "bars",
+  "Binary search": "bars",
+  "Binary search on answer (sqrt)": "none",
+  "Two pointers — pair sum": "bars",
+  "Sliding window — longest substring": "linear",
+  "Sliding window — max sum of k": "bars",
+
+  "Kadane — max subarray": "table",
+  "Prefix sums — range query": "table",
+  "Dutch national flag (sort 0/1/2)": "linear",
+  "Reverse & rotate in place": "linear",
+  "Remove duplicates (sorted)": "linear",
+  "Moore majority vote": "linear",
+
+  "Palindrome check": "linear",
+  "Anagram check": "table",
+  "KMP — prefix function": { kind: "table", rows: ["p", "pi"] },
+  "Reverse words": "linear",
+
+  "Reverse a linked list": "linear",
+  "Floyd cycle detection": "linear",
+  "Merge two sorted lists": "linear",
+
+  "Balanced parentheses": "stack",
+  "Monotonic stack — next greater": "stack",
+  "Queue via two stacks": "stack",
+
+  "BST insert & search": "tree",
+  "Inorder traversal (array tree)": "tree",
+  "Level order (BFS on array tree)": "tree",
+  "Tree height": "tree",
+
+  "BFS on grid": "table",
+  "DFS on adjacency matrix": "graph",
+  "Dijkstra (adjacency matrix)": "graph",
+  "Topological sort (Kahn)": "graph",
+  "Union-Find (DSU)": "forest",
+  "Floyd-Warshall": "table",
+
+  "Fibonacci (recursion)": "none",
+  "Fibonacci (memoised)": "table",
+  "0/1 Knapsack": "table",
+  "Longest common subsequence": "table",
+  "Edit distance": "table",
+  "Coin change (min coins)": "table",
+  "Longest increasing subsequence": "table",
+  "Climbing stairs": "table",
+
+  "N-Queens (4×4)": { kind: "board", var: "queen" },
+  "Subsets (power set)": "table",
+  "Permutations": "linear",
+
+  "GCD (Euclid)": "none",
+  "Sieve of Eratosthenes": "linear",
+  "Fast power (binary exponentiation)": "none",
+  "Prime check (trial division)": "none"
+};
