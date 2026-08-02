@@ -61,13 +61,21 @@ Playback: step forward/back, jump to first/last, scrub to any step, play at
 | `int[]` / `long[]` | bar chart with value and index labels |
 | array of only `0`/`1` (visited, sieve) | flag boxes, set entries filled |
 | array that never changes (offset tables) | compact box row, not a chart |
-| `int[][]` | heat-mapped matrix |
+| `int[][]` that is square with a zero diagonal | **node-link graph** — nodes on a circle, weights in boxes on the edges, arrowheads when the matrix is asymmetric |
+| any other `int[][]` | heat-mapped matrix |
+| `int[] tree` / `heap` (heap-encoded, `-1` = empty) | **binary tree** drawn by depth |
+| a node object with `left`/`right` | **binary tree** laid out in-order |
+| `int[] parent` (valid indices) | **disjoint-set forest**, one arrow per node to its parent |
 | `String` | character boxes |
 | `ArrayList`, `ArrayDeque` | contents in real order (the deque's circular buffer is unwrapped) |
 | linked-list nodes (`next` + `val`/`value`/`data`) | the chain, followed up to 64 nodes |
 | `HashMap`, `LinkedHashMap` | `key → value` entries, walked out of the bucket table |
 | `StringBuilder` | the text it currently holds |
 | plain numbers | a chip plus a sparkline of every value it has held so far |
+
+A graph picks up per-node labels automatically: if a parallel array named
+`dist`, `visited`, `done`, `order`, `indegree`… has the same length as the node
+count, its values hang under the nodes (`999` and negatives render as `∞`).
 
 ### Pointer tracking
 
@@ -80,14 +88,16 @@ attached to the array the running line actually indexes.
 ### Narration
 
 Each step's sentence is derived from the diff between two snapshots — no
-per-algorithm configuration:
+per-algorithm configuration. The UI prints each one in Vietnamese and English;
+the English half reads:
 
 ```
-Hoán đổi a[2] ↔ a[3]            swap a[2] ↔ a[3]
-exp: 1 → 0                      exp: 1 → 0
-queue[4] = 4 (trước là 0)       queue[4] = 4 (was 0)
-Gọi hàm mergeSort()             Call mergeSort()
-Trả về từ fib()                 Return from fib()
+swap a[2] ↔ a[3]
+exp: 1 → 0
+queue[4] = 4 (was 0)
+declare tmp = 9
+Call mergeSort()
+Return from fib()
 ```
 
 ---
@@ -159,6 +169,15 @@ Add it to the right group in `presets.js`:
 It appears in the catalog, the dropdown, and at `#Gnome sort` with no other
 changes.
 
+### Deep links
+
+`#<algorithm>` opens it and plays. `#<algorithm>@<step>` opens it paused on that
+step — handy for pointing someone at the exact moment something happens:
+
+```
+http://127.0.0.1:8088/#Union-Find (DSU)@50
+```
+
 ---
 
 ## Limits
@@ -168,9 +187,13 @@ changes.
   bytecode array access would fix this.
 - **Depth cap.** Object graphs are serialized 10 levels deep — long `HashMap`
   bucket chains, treeified buckets and long linked lists truncate past that.
-- **Step cap.** 4000 steps or 15 seconds per run, whichever comes first; the UI
-  says `CẮT BỚT / truncated` when a run is cut.
+- **Step cap.** 4000 steps or 15 seconds per run, whichever comes first; the
+  status line reports a truncated run.
 - **One class.** Your code must fit in a single `Main.java`.
+- **Tree/forest detection is conventional.** A heap-encoded tree must be called
+  `tree`/`heap`/`bst` and a disjoint set `parent`/`par`/`leader`; rename them and
+  they fall back to a box row. Adjacency matrices are detected structurally
+  (square, zero diagonal), so no naming rule applies there.
 
 ## License
 

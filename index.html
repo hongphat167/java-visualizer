@@ -122,6 +122,11 @@
          transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
          white-space: nowrap; }
 
+  /* node-link view for graphs and trees */
+  .netsvg { width: 100%; height: 360px; display: block; border-bottom: 3px solid var(--ink); }
+  .netsvg circle { transition: fill var(--dur) var(--ease); }
+  .netsvg text { pointer-events: none; }
+
   .matrix { display: grid; gap: 4px; width: max-content; }
   .mcell { width: 38px; height: 38px; display: grid; place-items: center; border: 3px solid var(--ink);
            font-family: var(--mono); font-size: 12px; font-weight: 700;
@@ -197,6 +202,13 @@
 </style>
 </head>
 <body>
+
+<!-- arrowhead for directed edges; ids resolve document-wide, so define it once -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="#101010"></path>
+  </marker>
+</defs></svg>
 
 <header>
   <div class="brand">
@@ -313,7 +325,7 @@ const preset = $("preset"), src = $("src"), codeview = $("codeview"), stage = $(
       status = $("status"), scrub = $("scrub");
 
 let steps = [], at = 0, timer = null, lines = [], debounce = null, running = false;
-let constant = new Set(), delay = 320;
+let constant = new Set(), delay = 320, pendingStep = null;
 const views = new Map();   // variable name -> live DOM, kept across steps so CSS can animate
 
 /* ---------------- presets ---------------- */
@@ -387,7 +399,11 @@ function openAlgo(name) {
 }
 
 function route() {
-  const hash = decodeURIComponent(location.hash.slice(1));
+  const raw = decodeURIComponent(location.hash.slice(1));
+  // "#Bubble sort@42" opens that algorithm paused on step 42
+  const cut = raw.lastIndexOf("@");
+  const hash = cut > 0 && /^\d+$/.test(raw.slice(cut + 1)) ? raw.slice(0, cut) : raw;
+  pendingStep = hash === raw ? null : +raw.slice(cut + 1) - 1;
   const viz = !!CODE[hash];
   if (viz) preset.value = hash;
   $("home").hidden = viz;
@@ -487,13 +503,21 @@ async function run() {
     }
     lines = src.value.split("\n");
     constant = findConstantArrays(steps);
+    graphVars = findGraphVars(steps);
+    treeVars = findTreeVars(steps);
+    forestVars = findForestVars(steps);
     notes = steps.map((s, i) => describe(i > 0 ? steps[i - 1] : null, s));   // narration, once
     at = 0;
     scrub.max = steps.length - 1;
     $("algotitle").textContent = preset.value.toUpperCase();
     enable(true);
-    render();
-    play();
+    if (pendingStep !== null) {
+      at = Math.max(0, Math.min(steps.length - 1, pendingStep));
+      render();
+    } else {
+      render();
+      play();
+    }
   } finally {
     running = false;
   }
@@ -587,10 +611,63 @@ function textOf(o) {
 
 const typeName = o => String(o.__type || "").replace(/.*\./, "");
 
+/* --- graphs & trees: decided once per run so the view never flickers --- */
+
+const TREE_NAMES = ["tree", "heap", "bst"];
+const FOREST_NAMES = ["parent", "par", "leader"];
+let graphVars = new Set(), treeVars = new Set(), forestVars = new Set();
+
+/** A square int matrix with a zero diagonal and at least one edge is an
+ *  adjacency/weight matrix. DP tables fail the diagonal test once filled. */
+function findGraphVars(steps) {
+  const last = {};
+  for (const s of steps) {
+    for (const [k, v] of Object.entries(s.vars)) if (Array.isArray(v) && Array.isArray(v[0])) last[k] = v;
+  }
+  const out = new Set();
+  for (const [k, m] of Object.entries(last)) {
+    const n = m.length;
+    if (n < 2 || n > 12) continue;
+    if (!m.every(r => Array.isArray(r) && r.length === n && r.every(x => typeof x === "number"))) continue;
+    if (!m.every((r, i) => r[i] === 0)) continue;
+    if (!m.some((r, i) => r.some((x, j) => i !== j && x !== 0))) continue;
+    out.add(k);
+  }
+  return out;
+}
+
+/** Heap-encoded binary trees are only recognisable by convention.
+ *  ponytail: name-based — rename `tree` and it falls back to a box row. */
+function findTreeVars(steps) {
+  const out = new Set();
+  for (const s of steps) {
+    for (const [k, v] of Object.entries(s.vars)) {
+      if (TREE_NAMES.includes(k) && Array.isArray(v) && v.length >= 3
+          && v.every(x => typeof x === "number")) out.add(k);
+    }
+  }
+  return out;
+}
+
+/** parent[] holding valid indices is a disjoint-set forest. */
+function findForestVars(steps) {
+  const out = new Set();
+  for (const s of steps) {
+    for (const [k, v] of Object.entries(s.vars)) {
+      if (FOREST_NAMES.includes(k) && Array.isArray(v) && v.length >= 2
+          && v.every(x => Number.isInteger(x) && x >= 0 && x < v.length)) out.add(k);
+    }
+  }
+  return out;
+}
+
 /** What to draw for one variable, or null to leave it in the scalar chips. */
 function shapeOf(name, v) {
   if (Array.isArray(v)) {
     if (!v.length) return null;
+    if (graphVars.has(name)) return { kind: "graph", data: v };
+    if (treeVars.has(name)) return { kind: "tree", data: v };
+    if (forestVars.has(name)) return { kind: "forest", data: v };
     if (v.every(row => Array.isArray(row) && row.every(x => typeof x === "number"))) return { kind: "matrix", data: v };
     if (v.every(x => typeof x === "number") && !constant.has(name)
         && !v.every(x => x === 0 || x === 1)) return { kind: "bars", data: v };
@@ -598,6 +675,10 @@ function shapeOf(name, v) {
   }
   // a one-character string is a value, not a sequence — leave it in the chips
   if (typeof v === "string" && v.length > 1) return { kind: "row", data: [...v], label: "chuỗi / string" };
+  if (v && typeof v === "object" && ("left" in v || "right" in v)) {
+    const t = objTree(v);
+    if (t.nodes.length) return { kind: "nodes", data: t, label: "cây / tree" };
+  }
   const items = unwrap(v) || unwrapList(v);
   if (items) return { kind: "row", data: items, label: typeName(v) };
   const pairs = unwrapMap(v);
@@ -612,16 +693,16 @@ function shapeOf(name, v) {
 function describe(prev, step) {
   if (!prev) return { vi: "Bắt đầu chạy chương trình.", en: "Program starts." };
   if (step.stack.length > prev.stack.length)
-    return { vi: `Gọi hàm <code>${step.method}()</code>`, en: `Call ${step.method}()` };
+    return { vi: `Gọi hàm <code>${escapeHtml(step.method)}()</code>`, en: `Call ${step.method}()` };
   if (step.stack.length < prev.stack.length)
-    return { vi: `Trả về từ <code>${prev.method}()</code>`, en: `Return from ${prev.method}()` };
+    return { vi: `Trả về từ <code>${escapeHtml(prev.method)}()</code>`, en: `Return from ${prev.method}()` };
 
   const vi = [], en = [];
   for (const [name, now] of Object.entries(step.vars)) {
     const was = prev.vars[name];
     if (was === undefined) {
       if (!Array.isArray(now) && typeof now !== "object") {
-        vi.push(`Khai báo <code>${name} = ${fmt(now)}</code>`);
+        vi.push(`Khai báo <code>${escapeHtml(name)} = ${escapeHtml(fmt(now))}</code>`);
         en.push(`declare ${name} = ${fmt(now)}`);
       }
       continue;
@@ -631,14 +712,14 @@ function describe(prev, step) {
       for (let i = 0; i < now.length; i++) if (JSON.stringify(now[i]) !== JSON.stringify(was[i])) moved.push(i);
       if (!moved.length) continue;
       if (moved.length === 2 && now[moved[0]] === was[moved[1]] && now[moved[1]] === was[moved[0]]) {
-        vi.push(`Hoán đổi <code>${name}[${moved[0]}] ↔ ${name}[${moved[1]}]</code>`);
+        vi.push(`Hoán đổi <code>${escapeHtml(name)}[${moved[0]}] ↔ ${escapeHtml(name)}[${moved[1]}]</code>`);
         en.push(`swap ${name}[${moved[0]}] ↔ ${name}[${moved[1]}]`);
       } else {
-        vi.push(moved.slice(0, 3).map(i => `<code>${name}[${i}] = ${fmt(now[i])}</code>`).join(", "));
+        vi.push(moved.slice(0, 3).map(i => `<code>${escapeHtml(name)}[${i}] = ${escapeHtml(fmt(now[i]))}</code>`).join(", "));
         en.push(moved.slice(0, 3).map(i => `${name}[${i}] = ${fmt(now[i])} (was ${fmt(was[i])})`).join(", "));
       }
     } else if (typeof now !== "object" && now !== was) {
-      vi.push(`<code>${name}: ${fmt(was)} → ${fmt(now)}</code>`);
+      vi.push(`<code>${escapeHtml(name)}: ${escapeHtml(fmt(was))} → ${escapeHtml(fmt(now))}</code>`);
       en.push(`${name}: ${fmt(was)} → ${fmt(now)}`);
     }
   }
@@ -671,6 +752,7 @@ function render() {
   for (const [name, value] of Object.entries(step.vars)) {
     const shape = shapeOf(name, value);
     if (!shape) continue;
+    if (shape.kind === "graph") annotateGraph(shape, step);
     const key = name + ":" + shape.kind;
     keep.add(key);
     let view = views.get(key);
@@ -684,6 +766,19 @@ function render() {
 
   drawVars(step, prev);
   drawStack(step);
+}
+
+// per-node labels a graph algorithm keeps in a parallel array
+const SUB_NAMES = ["dist", "d", "done", "visited", "order", "color", "parent", "indegree", "seen"];
+
+/** Hangs dist[]/visited[] under the nodes so a graph run shows its progress. */
+function annotateGraph(shape, step) {
+  const n = shape.data.length;
+  const hit = Object.entries(step.vars).find(([k, v]) =>
+    SUB_NAMES.includes(k) && Array.isArray(v) && v.length === n && v.every(x => typeof x === "number"));
+  if (!hit) return;
+  shape.subName = hit[0];
+  shape.sub = hit[1].map(x => (x < 0 || x >= 90) ? "∞" : String(x));
 }
 
 function drawCode(step) {
@@ -780,10 +875,30 @@ function makeView(name, kind) {
 
   view.update = (shape, pointers, before) => {
     const data = shape.data;
-    type.textContent = shape.label ? `${shape.label} · ${data.length}`
-      : shape.kind === "matrix" ? `${data.length}×${data[0].length}` : `${data.length} phần tử`;
+    type.textContent =
+        shape.kind === "graph" ? `đồ thị / graph · ${data.length} đỉnh${shape.subName ? ` · nhãn = ${shape.subName}` : ""}`
+      : shape.kind === "tree" ? `cây / tree · ${data.filter(v => v !== -1).length} đỉnh`
+      : shape.kind === "forest" ? `rừng / forest · ${data.filter((p, i) => p === i).length} gốc`
+      : shape.kind === "nodes" ? `${shape.label} · ${data.nodes.length} đỉnh`
+      : shape.kind === "matrix" ? `${data.length}×${data[0].length}`
+      : shape.label ? `${shape.label} · ${data.length}`
+      : `${data.length} phần tử`;
 
     if (shape.kind === "matrix") { updateMatrix(body, data); legend.innerHTML = ""; return; }
+
+    if (shape.kind === "graph" || shape.kind === "tree" || shape.kind === "nodes"
+        || shape.kind === "forest") {
+      // an object tree has no index space, so no pointer can name one of its nodes
+      const count = shape.kind === "nodes" ? 0 : data.length;
+      const marks = pointers.filter(p => p.idx >= 0 && p.idx < count);
+      legend.innerHTML = marks.map(p =>
+        `<span class="tag" style="background:${p.color};color:${POINTER_FG[p.color] || "var(--ink)"}">${escapeHtml(p.name)} = ${p.idx}</span>`).join("");
+      const net = shape.kind === "graph" ? matrixGraph(data, shape.sub)
+                : shape.kind === "tree" ? arrayTree(data)
+                : shape.kind === "forest" ? parentForest(data) : data;
+      updateNet(body, net, marks);
+      return;
+    }
 
     const live = shape.keyed ? [] : pointers.filter(p => p.idx >= 0 && p.idx < data.length);
     legend.innerHTML = live.map(p =>
@@ -818,15 +933,20 @@ function updateBars(body, data, before, isOut, live) {
   });
   sync(axis, data.length, () => document.createElement("div"));
 
-  const base = Math.min(0, ...data), span = Math.max(...data) - base || 1;
+  // an INF sentinel (999) would flatten every real value; scale without it and
+  // draw those bars empty, labelled ∞
+  const real = data.filter(v => v < 90);
+  const infinite = real.length && real.length < data.length;
+  const base = Math.min(0, ...(infinite ? real : data));
+  const span = Math.max(...(infinite ? real : data)) - base || 1;
   const hit = new Set(live.map(p => p.idx));
   [...plot.children].forEach((col, i) => {
-    const v = data[i], bar = col.querySelector(".bar");
+    const v = data[i], bar = col.querySelector(".bar"), isInf = infinite && v >= 90;
     col.title = `[${i}] = ${v}`;
     col.classList.toggle("out", isOut(i));
-    bar.style.height = Math.max(3, (v - base) / span * 92) + "%";
-    bar.style.background = hit.has(i) ? "var(--orange)" : "var(--yellow)";
-    col.querySelector(".v").textContent = data.length <= 30 ? v : "";
+    bar.style.height = isInf ? "100%" : Math.max(3, (v - base) / span * 92) + "%";
+    bar.style.background = isInf ? "var(--paper)" : hit.has(i) ? "var(--orange)" : "var(--yellow)";
+    col.querySelector(".v").textContent = data.length <= 30 ? (isInf ? "∞" : v) : "";
     if (Array.isArray(before) && before[i] !== undefined && before[i] !== v) {
       bar.style.background = "var(--lime)";
       flash(col);
@@ -893,6 +1013,163 @@ function updateLane(view, body, live, count, kind) {
   lane.style.height = 22 * Math.max(1, ...stackedAt.values()) + "px";
   const names = new Set(live.map(p => p.name));
   for (const [name, chip] of view.ptrs) if (!names.has(name)) chip.style.opacity = "0";
+}
+
+/* ---------------- node-link views ---------------- */
+
+const SVG_W = 1000, SVG_H = 460, NS = "http://www.w3.org/2000/svg";
+const svg = (tag, attrs) => {
+  const el = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+  return el;
+};
+
+/** Object tree (Node with left/right) laid out in-order: x = visit order, y = depth. */
+function objTree(root) {
+  const nodes = [], edges = [];
+  let column = 0;
+  (function walk(n, depth) {
+    if (!n || typeof n !== "object") return -1;
+    const key = ["val", "value", "data", "key"].find(k => k in n);
+    if (key === undefined) return -1;
+    const l = walk(n.left, depth + 1);
+    const id = nodes.length;
+    nodes.push({ label: fmt(n[key]), column: column++, depth });
+    const r = walk(n.right, depth + 1);
+    if (l >= 0) edges.push([id, l]);
+    if (r >= 0) edges.push([id, r]);
+    return id;
+  })(root, 0);
+  const span = Math.max(1, column);
+  nodes.forEach(n => { n.x = (n.column + 0.5) / span * SVG_W; n.y = 60 + n.depth * 110; });
+  return { nodes, edges };
+}
+
+/** Heap-encoded tree: children of i are 2i+1 / 2i+2, -1 marks an empty slot. */
+function arrayTree(a) {
+  const nodes = [], edges = [], byIndex = new Map();
+  a.forEach((v, i) => {
+    if (v === -1) return;
+    const depth = Math.floor(Math.log2(i + 1));
+    const perLevel = 2 ** depth, slot = i - (perLevel - 1);
+    byIndex.set(i, nodes.length);
+    nodes.push({ index: i, label: v, sub: `#${i}`, depth,
+                 x: (slot + 0.5) / perLevel * SVG_W, y: 60 + depth * 110 });
+  });
+  a.forEach((v, i) => {
+    const parent = Math.floor((i - 1) / 2);
+    if (i > 0 && byIndex.has(i) && byIndex.has(parent)) edges.push([byIndex.get(parent), byIndex.get(i)]);
+  });
+  return { nodes, edges };
+}
+
+/** n nodes evenly spaced on an ellipse. */
+function circleNodes(n, sub) {
+  const radius = Math.min(SVG_W, SVG_H) / 2 - 60;
+  return Array.from({ length: n }, (_, i) => {
+    const angle = -Math.PI / 2 + i * 2 * Math.PI / n;
+    return { index: i, label: i, sub: sub ? sub[i] : "",
+             x: SVG_W / 2 + radius * Math.cos(angle) * 1.7, y: SVG_H / 2 + radius * Math.sin(angle) };
+  });
+}
+
+/** parent[] as a forest: an arrow from each node to its parent, roots have none. */
+function parentForest(a) {
+  const edges = [];
+  a.forEach((p, i) => { if (p !== i) edges.push({ from: i, to: p, label: "", directed: true }); });
+  return { nodes: circleNodes(a.length, a.map((p, i) => p === i ? "root" : "")), edges };
+}
+
+/** Adjacency/weight matrix -> nodes on a circle, edges labelled with the weight. */
+function matrixGraph(m, sub) {
+  const n = m.length;
+  const nodes = circleNodes(n, sub);
+  const flat = m.flat();
+  const max = Math.max(...flat);
+  const sentinel = max >= 90 ? max : Infinity;      // INF placeholders are not edges
+  const weighted = flat.some(v => v !== 0 && v !== sentinel && v !== 1);
+  const symmetric = m.every((row, i) => row.every((v, j) => v === m[j][i]));
+
+  const edges = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = symmetric ? i + 1 : 0; j < n; j++) {
+      const w = m[i][j];
+      if (i === j || w === 0 || w === sentinel) continue;
+      edges.push({ from: i, to: j, label: weighted ? w : "", directed: !symmetric });
+    }
+  }
+  return { nodes, edges };
+}
+
+/** Draws either shape. Nodes and edges are kept across steps so fills animate. */
+function updateNet(body, net, live) {
+  let root = body.querySelector("svg");
+  if (!root) {
+    body.innerHTML = "";
+    root = svg("svg", { viewBox: `0 0 ${SVG_W} ${SVG_H}`, class: "netsvg" });
+    root.appendChild(svg("g", { class: "edges" }));
+    root.appendChild(svg("g", { class: "nodes" }));
+    body.appendChild(root);
+  }
+  const edgeLayer = root.querySelector(".edges"), nodeLayer = root.querySelector(".nodes");
+  const hit = new Map();                      // node index -> pointer sitting on it
+  for (const p of live) if (!hit.has(p.idx)) hit.set(p.idx, p);
+
+  sync(edgeLayer, net.edges.length, () => {
+    const g = svg("g", {});
+    g.appendChild(svg("line", { stroke: "#101010", "stroke-width": 4, "stroke-linecap": "round" }));
+    g.appendChild(svg("rect", { fill: "#fff", stroke: "#101010", "stroke-width": 3, height: 26 }));
+    g.appendChild(svg("text", { "font-family": "JetBrains Mono, monospace", "font-size": 15,
+                                "font-weight": 700, "text-anchor": "middle", fill: "#101010" }));
+    return g;
+  });
+  [...edgeLayer.children].forEach((g, k) => {
+    const e = net.edges[k];
+    const [a, b] = Array.isArray(e) ? [net.nodes[e[0]], net.nodes[e[1]]]
+                                    : [net.nodes[e.from], net.nodes[e.to]];
+    const label = Array.isArray(e) ? "" : String(e.label ?? "");
+    // directed pairs get a small perpendicular offset so both arrows stay readable
+    const directed = !Array.isArray(e) && e.directed;
+    const shift = directed ? 9 : 0;
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const ox = -dy / len * shift, oy = dx / len * shift;
+    // stop the line short of the target circle so the arrowhead stays visible
+    const trim = directed ? 36 : 0;
+    const [line, rect, text] = g.children;
+    line.setAttribute("x1", a.x + ox); line.setAttribute("y1", a.y + oy);
+    line.setAttribute("x2", b.x + ox - dx / len * trim);
+    line.setAttribute("y2", b.y + oy - dy / len * trim);
+    line.setAttribute("marker-end", directed ? "url(#arrow)" : "");
+    const mx = (a.x + b.x) / 2 + ox, my = (a.y + b.y) / 2 + oy;
+    const width = 18 + label.length * 11;
+    rect.setAttribute("x", mx - width / 2); rect.setAttribute("y", my - 13);
+    rect.setAttribute("width", width);
+    text.setAttribute("x", mx); text.setAttribute("y", my + 5);
+    text.textContent = label;
+    rect.style.display = text.style.display = label ? "" : "none";
+  });
+
+  sync(nodeLayer, net.nodes.length, () => {
+    const g = svg("g", {});
+    g.appendChild(svg("circle", { r: 30, stroke: "#101010", "stroke-width": 4 }));
+    g.appendChild(svg("text", { "font-family": "Space Grotesk, Helvetica, sans-serif", "font-size": 22,
+                                "font-weight": 700, "text-anchor": "middle" }));
+    g.appendChild(svg("text", { "font-family": "JetBrains Mono, monospace", "font-size": 14,
+                                "font-weight": 700, "text-anchor": "middle", fill: "#101010" }));
+    return g;
+  });
+  [...nodeLayer.children].forEach((g, k) => {
+    const n = net.nodes[k];
+    const p = n.index !== undefined ? hit.get(n.index) : undefined;
+    const [circle, label, sub] = g.children;
+    circle.setAttribute("cx", n.x); circle.setAttribute("cy", n.y);
+    circle.setAttribute("fill", p ? p.color : "var(--yellow)");
+    label.setAttribute("x", n.x); label.setAttribute("y", n.y + 8);
+    label.setAttribute("fill", p && POINTER_FG[p.color] ? POINTER_FG[p.color] : "#101010");
+    label.textContent = n.label;
+    sub.setAttribute("x", n.x); sub.setAttribute("y", n.y + 52);
+    sub.textContent = [p && p.name, n.sub].filter(Boolean).join(" · ");
+  });
 }
 
 function updateMatrix(body, data) {

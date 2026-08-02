@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -219,16 +220,49 @@ public class Visualizer {
             if (!loc.declaringType().name().startsWith("Main")) {
                 return null;
             }
-            StringBuilder vars = new StringBuilder();
-            try {
-                for (LocalVariable lv : frame.visibleVariables()) {
-                    if (vars.length() > 0) {
-                        vars.append(',');
-                    }
-                    vars.append(q(lv.name())).append(':').append(json(frame.getValue(lv), 0));
+            // Insertion order decides what the UI draws first, and later puts win.
+            Map<String, String> vars = new LinkedHashMap<>();
+
+            // static fields of Main first: algorithms that keep their data in a
+            // static array (trees, adjacency, memo tables) have no locals at all
+            ReferenceType owner = loc.declaringType();
+            for (Field f : owner.fields()) {
+                if (f.isStatic() && !f.isSynthetic()) {
+                    vars.put(f.name(), json(owner.getValue(f), 0));
                 }
-            } catch (AbsentInformationException ignored) {
-                // compiled without -g on some frame; locals simply unavailable
+            }
+            ObjectReference self = frame.thisObject();
+            if (self != null) {
+                for (Field f : self.referenceType().fields()) {
+                    if (!f.isStatic() && !f.isSynthetic()) {
+                        vars.put(f.name(), json(self.getValue(f), 0));
+                    }
+                }
+            }
+            // Locals of every Main frame, outermost first: while a recursive call
+            // is on top, main's tree/array must stay on screen. The innermost
+            // frame is written last, so a shadowed name resolves to it.
+            List<StackFrame> frames = se.thread().frames();
+            for (int i = frames.size() - 1; i >= 0; i--) {
+                StackFrame f = frames.get(i);
+                if (!f.location().declaringType().name().startsWith("Main")) {
+                    continue;
+                }
+                try {
+                    for (LocalVariable lv : f.visibleVariables()) {
+                        vars.put(lv.name(), json(f.getValue(lv), 0));
+                    }
+                } catch (AbsentInformationException ignored) {
+                    // compiled without -g on some frame; locals simply unavailable
+                }
+            }
+
+            StringBuilder body = new StringBuilder();
+            for (Map.Entry<String, String> e : vars.entrySet()) {
+                if (body.length() > 0) {
+                    body.append(',');
+                }
+                body.append(q(e.getKey())).append(':').append(e.getValue());
             }
             StringBuilder stack = new StringBuilder();
             for (StackFrame f : se.thread().frames()) {
@@ -244,7 +278,7 @@ public class Visualizer {
             return "{\"line\":" + loc.lineNumber()
                     + ",\"method\":" + q(loc.method().name())
                     + ",\"stack\":[" + stack + "]"
-                    + ",\"vars\":{" + vars + "}}";
+                    + ",\"vars\":{" + body + "}}";
         } catch (IncompatibleThreadStateException e) {
             return null;
         }
