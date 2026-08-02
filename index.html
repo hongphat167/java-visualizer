@@ -557,6 +557,9 @@ const POINTER_NAMES = ["i", "j", "k", "mid", "lo", "hi", "left", "right", "low",
 const POINTER_COLORS = ["var(--orange)", "var(--blue)", "var(--lime)", "var(--yellow)"];
 const POINTER_FG = { "var(--blue)": "#fff", "var(--orange)": "#fff" };
 const WINDOWS = [["lo", "hi"], ["low", "high"], ["left", "right"], ["start", "end"], ["first", "last"]];
+// names that really mean "this node", used by the graph/tree views
+const NODE_POINTERS = ["i", "j", "k", "u", "v", "cur", "curr", "node", "idx", "index",
+                       "next", "p", "q", "r", "c", "root", "top", "head", "tail", "step"];
 
 function findPointers(vars) {
   return POINTER_NAMES.filter(n => Number.isInteger(vars[n]))
@@ -669,7 +672,9 @@ function shapeOf(name, v) {
     if (treeVars.has(name)) return { kind: "tree", data: v };
     if (forestVars.has(name)) return { kind: "forest", data: v };
     if (v.every(row => Array.isArray(row) && row.every(x => typeof x === "number"))) return { kind: "matrix", data: v };
-    if (v.every(x => typeof x === "number") && !constant.has(name)
+    // Only tiny constant arrays (dr/dc offset tables) collapse to a box row —
+    // a constant array of 6+ numbers is usually the data being searched.
+    if (v.every(x => typeof x === "number") && !(constant.has(name) && v.length <= 4)
         && !v.every(x => x === 0 || x === 1)) return { kind: "bars", data: v };
     return { kind: "row", data: v };
   }
@@ -890,7 +895,10 @@ function makeView(name, kind) {
         || shape.kind === "forest") {
       // an object tree has no index space, so no pointer can name one of its nodes
       const count = shape.kind === "nodes" ? 0 : data.length;
-      const marks = pointers.filter(p => p.idx >= 0 && p.idx < count);
+      // `left`/`right`/`lo`/`hi` bound array windows; on a node view they are
+      // values (a subtree height, a weight), not node ids — don't colour a node
+      const marks = pointers.filter(p =>
+        p.idx >= 0 && p.idx < count && NODE_POINTERS.includes(p.name));
       legend.innerHTML = marks.map(p =>
         `<span class="tag" style="background:${p.color};color:${POINTER_FG[p.color] || "var(--ink)"}">${escapeHtml(p.name)} = ${p.idx}</span>`).join("");
       const net = shape.kind === "graph" ? matrixGraph(data, shape.sub)
@@ -907,7 +915,9 @@ function makeView(name, kind) {
     let from = 0, to = data.length - 1;
     for (const [a, b] of WINDOWS) {
       const pa = live.find(p => p.name === a), pb = live.find(p => p.name === b);
-      if (pa && pb) { from = pa.idx; to = pb.idx; break; }
+      // once the two ends cross, the window is empty — dimming everything then
+      // just greys the whole row out, so drop it
+      if (pa && pb && pa.idx <= pb.idx) { from = pa.idx; to = pb.idx; break; }
     }
     const windowed = from > 0 || to < data.length - 1;
     const isOut = i => windowed && (i < from || i > to);
@@ -970,7 +980,8 @@ function updateRow(body, data, before, isOut, live) {
     return box;
   });
   [...row.children].forEach((box, i) => {
-    const v = data[i], text = fmt(v);
+    const v = data[i];
+    const text = v === " " ? "␣" : fmt(v);   // an empty box reads as a bug, not a space
     box.className = "box" + (wide ? " wide" : "");
     box.classList.toggle("on", v === 1 || v === true || hit.has(i));
     box.classList.toggle("out", isOut(i));
@@ -985,14 +996,15 @@ function updateRow(body, data, before, isOut, live) {
 function updateLane(view, body, live, count, kind) {
   const lane = body.querySelector(".lane");
   const track = body.querySelector(kind === "bars" ? ".plot" : ".row");
-  const gap = 6;
-  const pitch = kind === "bars"
-    ? (track.clientWidth - gap * (count - 1)) / count + gap
-    : (track.firstElementChild ? track.firstElementChild.offsetWidth + gap : 52);
-  const width = pitch - gap;
+  // Measure the real column: bars are flex items capped at max-width, so
+  // clientWidth / count overshoots and the chips drift right of their bar.
+  const origin = lane.getBoundingClientRect().left;
 
   const stackedAt = new Map();          // two pointers on one index stack instead of overlapping
   for (const p of live) {
+    const column = track.children[p.idx];
+    if (!column) continue;
+    const box = column.getBoundingClientRect();
     const rank = stackedAt.get(p.idx) || 0;
     stackedAt.set(p.idx, rank + 1);
     let chip = view.ptrs.get(p.name);
@@ -1006,8 +1018,8 @@ function updateLane(view, body, live, count, kind) {
     chip.textContent = p.name;
     chip.style.background = p.color;
     chip.style.color = POINTER_FG[p.color] || "var(--ink)";
-    chip.style.width = Math.max(width, 22) + "px";
-    chip.style.transform = `translate(${p.idx * pitch}px, ${rank * 20}px)`;
+    chip.style.width = Math.max(box.width, 24) + "px";
+    chip.style.transform = `translate(${box.left - origin}px, ${rank * 20}px)`;
     chip.style.opacity = "1";
   }
   lane.style.height = 22 * Math.max(1, ...stackedAt.values()) + "px";
@@ -1130,7 +1142,7 @@ function updateNet(body, net, live) {
     const label = Array.isArray(e) ? "" : String(e.label ?? "");
     // directed pairs get a small perpendicular offset so both arrows stay readable
     const directed = !Array.isArray(e) && e.directed;
-    const shift = directed ? 9 : 0;
+    const shift = directed ? 12 : 0;
     const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
     const ox = -dy / len * shift, oy = dx / len * shift;
     // stop the line short of the target circle so the arrowhead stays visible
@@ -1140,7 +1152,10 @@ function updateNet(body, net, live) {
     line.setAttribute("x2", b.x + ox - dx / len * trim);
     line.setAttribute("y2", b.y + oy - dy / len * trim);
     line.setAttribute("marker-end", directed ? "url(#arrow)" : "");
-    const mx = (a.x + b.x) / 2 + ox, my = (a.y + b.y) / 2 + oy;
+    // labels sit off-centre: every edge crossing the middle would otherwise
+    // stack its weight box on the same spot, and a directed pair on two
+    const t = directed ? 0.32 : 0.4;
+    const mx = a.x + dx * t + ox, my = a.y + dy * t + oy;
     const width = 18 + label.length * 11;
     rect.setAttribute("x", mx - width / 2); rect.setAttribute("y", my - 13);
     rect.setAttribute("width", width);
