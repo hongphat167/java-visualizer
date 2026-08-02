@@ -47,7 +47,23 @@ const body = html.slice(html.lastIndexOf("<script>") + 8, html.lastIndexOf("</sc
     return figureSpec;
   },
   data(step) { return figureData(step); },
+  // figureData says the numbers are there; it cannot say the figure can be built
+  // from them. These three builders are pure, so they run here — drawFigure itself
+  // needs a real DOM and only produces noise against the stub.
+  build(step) {
+    const d = figureData(step);
+    if (!d) return;
+    if (figureSpec.kind === "graph") matrixGraph(d, subLabels(step, d.length));
+    else if (figureSpec.kind === "forest") parentForest(d, nodeLabels(step, d.length), allocated(step));
+    else if (figureSpec.kind === "tree" && Array.isArray(d)) arrayTree(d);
+  },
   note(prev, step) { return describe(prev, step); },
+  // What the input box would send: readArray needs the algorithm selected,
+  // because that is how an opted-out one reports no editable array.
+  editable(a) { algo = a; return readArray(CODE[a]); },
+  retype(a, values) {
+    return CODE[a].replace(ARRAY_LITERAL, m => m.replace(/\\{[^{}]*\\}/, "{" + values.join(", ") + "}"));
+  },
 };`);
 
 Object.assign(global, realTimers);
@@ -72,6 +88,7 @@ Object.assign(global, realTimers);
           const len = d && d.items ? d.items.length : Array.isArray(d) ? d.length : d === null ? 0 : 1;
         if (!len) empty++;
           __api.note(i ? trace.steps[i - 1] : null, trace.steps[i]);
+          __api.build(trace.steps[i]);
         }
       } catch (e) { threw = e; }
 
@@ -84,6 +101,24 @@ Object.assign(global, realTimers);
       if (kinds.size > 1) flags.push("view changed mid-run: " + [...kinds].join("/"));
       if (want !== "none" && empty > trace.steps.length * 0.5)
         flags.push(`empty ${empty}/${trace.steps.length} steps`);
+
+      // The randomise button rewrites the first int[] literal in the source. When
+      // that literal is the algorithm's own state instead of its input, the run
+      // comes back wrong or never terminates, so trace that path too.
+      const editable = __api.editable(name);
+      if (editable.length) {
+        const swapped = editable.map((_, i) => 1 + (i * 7 + 3) % 20);
+        const res2 = await realFetch("http://127.0.0.1:8088/api/trace",
+                                     { method: "POST", body: __api.retype(name, swapped) });
+        const t2 = await res2.json();
+        // A crashing program still traces with ok:true — the stack trace only
+        // shows up on stdout. Running past the step cap sets truncated instead.
+        const boom = /^Exception in thread|^\tat /m.test(t2.stdout || "");
+        const label = `edited input {${swapped.join(", ")}}`;
+        if (!t2.ok) flags.push(`${label} fails to trace`);
+        else if (boom) flags.push(`${label} throws: ${(t2.stdout.match(/^Exception.*/m) || [""])[0]}`);
+        else if (t2.truncated && !trace.truncated) flags.push(`${label} runs past the step cap`);
+      }
 
       if (flags.length) { problems++; console.log(`${group} / ${name}\n    ${flags.join("\n    ")}`); }
       else console.log(`ok  ${want.padEnd(7)} ${spec ? String(spec.name).padEnd(8) : "".padEnd(8)} ${name}`);

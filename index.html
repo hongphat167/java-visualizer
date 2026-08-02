@@ -137,11 +137,21 @@
   .netwrap svg { width: 100%; height: 320px; display: block; }
   .netwrap circle, .netwrap text { transition: fill var(--dur) var(--ease); }
 
-  .tablewrap { min-height: 300px; display: flex; align-items: center; justify-content: center;
+  .tablewrap { min-height: 300px; display: flex; align-items: center;
                border-bottom: 3px solid var(--ink); padding: 14px 0 18px; overflow: auto; }
+  /* `justify-content: center` clips the overflowing side of a scroll container and
+     leaves it unreachable — a 26-column count[] lost its first cells that way.
+     Auto margins centre the same way but yield when the content is too wide.
+     Same trick .linear .set already uses. */
+  .tablewrap > * { margin: auto; }
   .trow { display: flex; gap: 4px; margin-bottom: 4px; align-items: center; }
   .thead { font-family: var(--mono); font-size: 12px; font-weight: 700; opacity: .75;
            text-align: center; flex: none; }
+  .ptr { color: var(--cmp); opacity: 1; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 0 0;
+            font-family: var(--mono); font-size: 11px; opacity: .8; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .legend i { width: 13px; height: 13px; border: 2px solid var(--ink); display: block; }
   .tcell { flex: none; display: flex; align-items: center; justify-content: center;
            border: 3px solid var(--ink); font-family: var(--mono); font-size: 14px; font-weight: 700;
            transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
@@ -161,6 +171,8 @@
   .linear .box.arrow { min-width: 26px; height: 56px; padding: 0; border: none; box-shadow: none;
                        font-size: 22px; background: transparent; display: flex;
                        align-items: center; justify-content: center; }
+  .linear .box.slot { border-style: dashed; background: transparent; box-shadow: none; opacity: .4; }
+  .linear .tag.hint { opacity: .55; font-weight: 400; }
   .linear .box.nil { min-width: 58px; height: 56px; padding: 0 12px; border: 3px dashed var(--ink);
                      box-shadow: none; font-size: 13px; background: transparent; color: #8A8070;
                      display: flex; align-items: center; justify-content: center; }
@@ -326,6 +338,7 @@
           <div id="algoTitle">—</div><div class="step" id="stepNo">step 0 / 0</div>
         </div>
         <div class="stage-body" id="stage"></div>
+        <div class="legend" id="legend"></div>
         <div class="transport">
           <button class="sq" id="prev">◀</button>
           <button id="play">▶ Chạy</button>
@@ -575,6 +588,10 @@ $("target").onkeydown = e => { if (e.key === "Enter") build(); };
 // holding INF placeholders is left alone (the design hides the box then).
 const ARRAY_LITERAL = /(?:^|[^\]])\bint\[\]\s+\w+\s*=\s*\{\s*-?\d+(?:\s*,\s*-?\d+)*\s*\}/;
 function readArray(source) {
+  // A few algorithms open with an int[] that is their own state, not input —
+  // see the `input` field in presets.js. Reporting no array hides the input box
+  // (and its randomise button) and stops sourceWithInput rewriting the literal.
+  if (NO_INPUT.has(algo)) return [];
   const m = source.match(ARRAY_LITERAL);
   if (!m) return [];
   return m[0].slice(m[0].indexOf("{") + 1, -1).split(",").map(x => +x.trim());
@@ -674,7 +691,8 @@ async function build() {
     at = pendingStep !== null ? Math.max(0, Math.min(steps.length - 1, pendingStep)) : 0;
     drawCode();
     render();
-    if (pendingStep === null) play();
+    // Open paused. Autoplay started before the learner had read the code, and the
+    // run was over by the time they looked up; ▶ is one click away.
     pendingStep = null;
   } finally {
     running = false;
@@ -701,7 +719,9 @@ const POINTER_NAMES = ["i", "j", "k", "mid", "lo", "hi", "left", "right", "low",
                        "p", "q", "head", "tail", "front", "rear", "pivot", "read", "write",
                        "top", "row", "col", "r", "c", "nr", "nc", "amount", "step"];
 const NODE_POINTERS = ["i", "j", "k", "u", "v", "cur", "curr", "node", "idx", "index",
-                       "next", "p", "q", "r", "c", "root", "top", "head", "tail", "step"];
+                       // no "step": in Dijkstra and A* it counts rounds, and pointing
+                       // it at whichever node shares that number reads as a real visit
+                       "next", "p", "q", "r", "c", "root", "top", "head", "tail"];
 const WINDOWS = [["lo", "hi"], ["low", "high"], ["left", "right"], ["start", "end"], ["first", "last"]];
 const SUB_NAMES = ["dist", "d", "done", "visited", "order", "color", "parent", "indegree", "seen"];
 
@@ -935,15 +955,9 @@ function figureData(step) {
     return t.nodes.length ? t : null;
   }
   if (figureSpec.kind === "stack" || figureSpec.kind === "queue") {
-    const spec = roles[figureSpec.name] || {};
+    // same slicing rule resolveFigure uses, so the two cannot drift apart
     const items = Array.isArray(v) ? v : (unwrap(v) || []);
-    if (figureSpec.kind === "stack") {
-      const top = step.vars[spec.top];
-      return Number.isInteger(top) ? items.slice(0, Math.max(0, Math.min(top, items.length))) : items;
-    }
-    const from = step.vars[spec.from], to = step.vars[spec.to];
-    return Number.isInteger(from) && Number.isInteger(to)
-      ? items.slice(Math.max(0, from), Math.max(0, Math.min(to, items.length))) : items;
+    return liveSlice(figureSpec.name, items, step);
   }
   if (figureSpec.kind === "list") {
     const chain = v && typeof v === "object" ? chainOf(v) : null;
@@ -1013,8 +1027,15 @@ function render() {
     : figure.kind === "list" ? figure.data.items.length
     : figure.kind === "nodes" ? figure.data.nodes.length
     : figure.data.length;
-  $("algoTitle").textContent = algo.toUpperCase()
-    + (!figure ? "" : isTableView(figure.kind) ? " · BẢNG DP / DP TABLE" : " · n = " + count);
+  // Name the variable on screen rather than calling every grid a DP table: a BFS
+  // grid, a Floyd matrix and a knapsack table all landed under the same label,
+  // and a learner cannot match the picture to the code without the name.
+  const shape = !figure ? ""
+    : isTableView(figure.kind)
+      ? ` · ${figure.name}[${Array.isArray(figure.data[0])
+            ? figure.data.length + "×" + figure.data[0].length : figure.data.length}]`
+      : ` · ${figure.name} · n = ${count}`;
+  $("algoTitle").textContent = algo.toUpperCase() + shape;
 
   const showVi = lang !== "en", showEn = lang !== "vi";
   $("noteVi").innerHTML = showVi ? notes[at].vi : esc(notes[at].en);
@@ -1024,10 +1045,28 @@ function render() {
   const hot = $("codeLines").querySelector(".on");
   if (hot) hot.scrollIntoView({ block: "nearest", behavior: "smooth" });
 
+  drawLegend(figure, pointers);
   drawFigure(figure, step, prev, pointers);
   drawVars(step, figure);
   drawStats();
   drawLog(showVi, showEn);
+}
+
+// The colours carry the whole story of a step, and nothing on screen said what
+// they meant. Only list the ones the current figure can actually produce.
+function drawLegend(figure, pointers) {
+  if (!figure) { $("legend").innerHTML = ""; return; }
+  // A 2-D table can only place a (row, col) pair, so listing every loop variable
+  // would promise tags that never appear.
+  const flat = isTableView(figure.kind) && Array.isArray(figure.data[0]);
+  const shown = flat ? pointers.filter(p => ROW_POINTERS.includes(p.name) || COL_POINTERS.includes(p.name))
+                     : pointers;
+  const keys = shown.map(p => p.name).join(" ");
+  const items = [[PAL.swap, "vừa thay đổi / changed"], [PAL.cmp, "đang xét / current"]];
+  if (figure.kind === "bars" || figure.kind === "graph") items.push([PAL.done, "đã xong / settled"]);
+  if (keys) items.push([null, "con trỏ / pointers: " + keys]);
+  $("legend").innerHTML = items.map(([c, text]) =>
+    `<span>${c ? `<i style="background:${c}"></i>` : ""}${esc(text)}</span>`).join("");
 }
 
 const KEYWORD_LINE = /^\s*(int|void|for|while|if|else|return)/;
@@ -1053,13 +1092,13 @@ function drawFigure(figure, step, prev, pointers) {
   const before = prev ? prev.vars[figure.name] : undefined;
 
   if (figure.kind === "bars") return drawBars(stage, figure.data, before, pointers);
-  if (figure.kind === "rows") return drawTable(stage, figure.data, before, figureSpec.names);
+  if (figure.kind === "rows") return drawTable(stage, figure.data, before, figureSpec.names, false, pointers);
   if (figure.kind === "board") return drawTable(stage, figure.data, before, null, true);
   if (figure.kind === "table") {
     // a 1-D dp array is one row, exactly as the design shows LIS / Coin Change
     const rows = Array.isArray(figure.data[0]) ? figure.data : [figure.data];
     return drawTable(stage, rows, Array.isArray(before) && !Array.isArray(before[0]) ? [before] : before,
-                     Array.isArray(figure.data[0]) ? null : [figure.name]);
+                     Array.isArray(figure.data[0]) ? null : [figure.name], false, pointers);
   }
   if (figure.kind === "list") return drawList(stage, figure.data, step);
   if (figure.kind === "linear") return drawLinear(stage, figure.data, before, pointers, null);
@@ -1090,10 +1129,22 @@ function allocated(step) {
   return null;
 }
 
+// Which nodes the algorithm is finished with, read off the same per-node array
+// that supplies the sub-labels. Without it every circle is the same colour and
+// the only progress on screen is one number under each node.
+function settledMask(name, values) {
+  if (name === "dist" || name === "d") return values.map(x => x >= 0 && x < 90);
+  if (name === "indegree") return values.map(x => x === 0);      // Kahn: ready to emit
+  if (name === "parent") return null;                            // a link, not progress
+  return values.map(x => x !== 0);                               // visited/seen/done/order/color
+}
+
 function subLabels(step, n) {
   const hit = Object.entries(step.vars).find(([k, v]) =>
     SUB_NAMES.includes(k) && Array.isArray(v) && v.length === n && v.every(x => typeof x === "number"));
-  return hit ? hit[1].map(x => (x < 0 || x >= 90) ? "∞" : String(x)) : null;
+  if (!hit) return null;
+  return { name: hit[0], text: hit[1].map(x => (x < 0 || x >= 90) ? "∞" : String(x)),
+           settled: settledMask(hit[0], hit[1]) };
 }
 
 /* -- bars (design: value on top, 3px border, no bottom edge, gap 12/6) -- */
@@ -1118,6 +1169,10 @@ function drawBars(stage, data, before, pointers) {
   const base = Math.min(0, ...(infinite ? real : data));
   const span = Math.max(...(infinite ? real : data)) - base || 1;
   const hit = new Set(pointers.map(p => p.idx));
+  // drawLinear already tags its cells with the pointer names; bars only had them
+  // in a hover title, so which of i/j/lo/hi sat where was invisible while playing.
+  const named = new Map();
+  for (const p of pointers) named.set(p.idx, [...(named.get(p.idx) || []), p.name]);
   // gen_dedupe marks rng(write) as settled — the kept prefix behind a write pointer
   const settled = pointers.find(p => p.name === "write");
   [...bars.children].forEach((col, i) => {
@@ -1131,16 +1186,42 @@ function drawBars(stage, data, before, pointers) {
                          : settled && i < settled.idx ? PAL.done
                          : isInf ? "var(--paper)" : PAL.base;
     col.title = `[${i}] = ${v}`;
-    axis.children[i].textContent = i;
+    const tags = named.get(i);
+    axis.children[i].textContent = tags ? tags.join(" ") : i;
+    axis.children[i].className = tags ? "ptr" : "";
   });
 }
 
 /* -- DP table (design: header row + row labels, 52×46 cells) -- */
-function drawTable(stage, rows, before, labels, board) {
+// Where the loop variables are pointing, as {row, col} sets. A table whose array
+// is only ever read — Kadane, prefix sums, a BFS grid — has nothing else moving,
+// so without this it draws once and then sits still for the whole run.
+const ROW_POINTERS = ["r", "row", "i"], COL_POINTERS = ["c", "col", "j"];
+function tableHits(rows, pointers) {
+  const cols = rows[0].length;
+  if (rows.length === 1) return { cells: new Set(pointers.map(p => "0," + p.idx)) };
+  const r = pointers.find(p => ROW_POINTERS.includes(p.name));
+  const c = pointers.find(p => COL_POINTERS.includes(p.name));
+  // Only a genuine (row, col) pair addresses a cell; one index alone is ambiguous
+  // on a 2-D table, so highlight its whole line instead of guessing a cell.
+  if (r && c) return { cells: new Set([r.idx + "," + c.idx]), rowTag: r, colTag: c };
+  if (r) return { row: r.idx, cells: new Set(), rowTag: r };
+  if (c) return { col: c.idx, cells: new Set(), colTag: c };
+  return { cells: new Set() };
+}
+// pointer names for a one-row table, keyed by column
+function colTags(rows, pointers) {
+  const m = new Map();
+  if (rows.length === 1) for (const p of pointers) m.set(p.idx, [...(m.get(p.idx) || []), p.name]);
+  return m;
+}
+
+function drawTable(stage, rows, before, labels, board, pointers = []) {
   let wrap = stage.querySelector(".tablewrap");
   if (!wrap) { stage.innerHTML = `<div class="tablewrap"><div></div></div>`; wrap = stage.querySelector(".tablewrap"); }
   const grid = wrap.firstElementChild;
   const cols = rows[0].length;
+  const hits = board ? { cells: new Set() } : tableHits(rows, pointers);
   const wide = cols > 10 || rows.length > 10;
   const cw = wide ? "40px" : "52px", ch = wide ? "38px" : "46px";
 
@@ -1152,9 +1233,12 @@ function drawTable(stage, rows, before, labels, board) {
     d.className = "thead";
     return d;
   });
+  const tags = colTags(rows, hits.cells ? pointers : []);
   [...head.children].forEach((cell, c) => {
     cell.style.width = cw;
-    cell.textContent = c === 0 ? "" : c - 1;
+    const t = tags.get(c - 1) || (hits.colTag && hits.colTag.idx === c - 1 ? [hits.colTag.name] : null);
+    cell.textContent = c === 0 ? "" : t ? t.join(" ") : c - 1;
+    cell.className = t ? "thead ptr" : "thead";
   });
 
   rows.forEach((row, r) => {
@@ -1163,18 +1247,21 @@ function drawTable(stage, rows, before, labels, board) {
     sync(line, cols + 1, () => document.createElement("div"));
     [...line.children].forEach((cell, c) => {
       if (c === 0) {
-        cell.className = "thead";
+        const onRow = hits.rowTag && hits.rowTag.idx === r;
+        cell.className = onRow ? "thead ptr" : "thead";
         cell.style.width = cw;
-        cell.textContent = labels ? labels[r] : r;
+        cell.textContent = onRow ? hits.rowTag.name : labels ? labels[r] : r;
         return;
       }
       const v = row[c - 1];
       const was = Array.isArray(before) && before[r] ? before[r][c - 1] : undefined;
       const changed = was !== undefined && was !== v;
+      const at = hits.cells.has(r + "," + (c - 1)) || hits.row === r || hits.col === c - 1;
       cell.className = "tcell";
       cell.style.width = cw;
       cell.style.height = ch;
-      cell.style.background = changed ? PAL.cmp : v ? (board ? PAL.base : "var(--soft)") : "#fff";
+      cell.style.background = changed ? PAL.cmp : at ? PAL.base
+                            : v ? (board ? PAL.base : "var(--soft)") : "#fff";
       cell.style.color = changed ? "#fff" : "var(--ink)";
       cell.textContent = board ? (v ? "♛" : "") : v >= 90 ? "∞" : v;
     });
@@ -1187,19 +1274,14 @@ function drawLinear(stage, data, before, pointers, role) {
   if (!set) { stage.innerHTML = `<div class="linear"><div class="set"></div></div>`; set = stage.querySelector(".set"); }
   // a stack grows upwards (the design uses column-reverse), a queue runs left to right
   set.style.flexDirection = role === "stack" ? "column-reverse" : "row";
-  const note = set.querySelector(".empty");
-  if (note) note.remove();               // same reason as in drawVars: never sync over it
-  if (!data.length) {
-    set.innerHTML = "";
-    const empty = document.createElement("div");
-    empty.className = "empty mono";
-    empty.style.opacity = ".6";
-    empty.textContent = role === "stack" ? "Ngăn xếp rỗng / empty stack"
-                      : role === "queue" ? "Hàng đợi rỗng / empty queue" : "—";
-    set.appendChild(empty);
-    return;
-  }
-  sync(set, data.length, () => {
+  // A stack sits empty for a third of its run. Replacing the whole figure with a
+  // line of text made the container vanish exactly when a learner is trying to
+  // see that it is empty, so keep the slots and draw the unused ones as ghosts.
+  // The deepest it has been is remembered per figure — views is cleared when the
+  // figure changes — so the box stops resizing on every push and pop.
+  const cap = Math.max(data.length, views.get("cap") || 0, role ? 1 : 0);
+  views.set("cap", cap);
+  sync(set, Math.max(cap, data.length), () => {
     const item = document.createElement("div");
     item.className = "item";
     item.innerHTML = `<div class="box"></div><div class="tag"></div>`;
@@ -1208,6 +1290,17 @@ function drawLinear(stage, data, before, pointers, role) {
   const byIndex = new Map();
   for (const p of pointers) (byIndex.get(p.idx) || byIndex.set(p.idx, []).get(p.idx)).push(p.name);
   [...set.children].forEach((item, i) => {
+    const box = item.querySelector(".box"), tag = item.querySelector(".tag");
+    if (i >= data.length) {                       // a slot this structure has used before
+      box.className = "box slot";
+      box.textContent = "";
+      box.style.background = "";
+      box.style.color = "";
+      tag.className = "tag hint";
+      tag.textContent = i === 0
+        ? (role === "queue" ? "hàng đợi rỗng / empty" : "ngăn xếp rỗng / empty") : "";
+      return;
+    }
     const v = data[i];
     const text = v === " " ? "␣" : fmt(v);
     const changed = Array.isArray(before) && before[i] !== undefined
@@ -1217,14 +1310,15 @@ function drawLinear(stage, data, before, pointers, role) {
     const edge = role === "stack" ? (i === data.length - 1 ? "top ↑" : "")
                : role === "queue" ? (i === 0 ? "front" : i === data.length - 1 ? "rear" : "")
                : null;
-    const box = item.querySelector(".box");
+    box.className = "box";
     box.textContent = text;
     box.style.background = changed ? PAL.swap
                          : names ? PAL.cmp
                          : edge ? PAL.base
                          : (!role && (v === 1 || v === true)) ? PAL.done : "#fff";
     box.style.color = (changed || names) ? "#fff" : "var(--ink)";
-    item.querySelector(".tag").textContent = edge !== null ? edge : (names ? names.join(" ") : String(i));
+    tag.className = "tag";
+    tag.textContent = edge !== null ? edge : (names ? names.join(" ") : String(i));
   });
 }
 
@@ -1284,7 +1378,8 @@ function circleNodes(n, sub) {
   const radius = Math.min(SVG_W, SVG_H) / 2 - 70;
   return Array.from({ length: n }, (_, i) => {
     const angle = -Math.PI / 2 + i * 2 * Math.PI / n;
-    return { index: i, label: i, sub: sub ? sub[i] : "",
+    return { index: i, label: i, sub: sub ? sub.text[i] : "",
+             done: !!(sub && sub.settled && sub.settled[i]),
              x: SVG_W / 2 + radius * Math.cos(angle) * 1.7, y: SVG_H / 2 + radius * Math.sin(angle) };
   });
 }
@@ -1310,7 +1405,7 @@ function parentForest(a, labels, n) {
   const live = a.slice(0, size);
   const edges = [];
   live.forEach((p, i) => { if (p !== i && p < size) edges.push({ from: i, to: p, label: "", directed: true }); });
-  const nodes = circleNodes(size, live.map((p, i) => p === i ? "root" : "#" + i));
+  const nodes = circleNodes(size, { text: live.map((p, i) => p === i ? "root" : "#" + i) });
   if (labels) nodes.forEach((node, i) => { if (labels[i]) node.label = labels[i]; });
   return { nodes, edges };
 }
@@ -1402,7 +1497,7 @@ function drawNet(stage, net, pointers) {
     const n = net.nodes[k], p = n.index !== undefined ? hit.get(n.index) : undefined;
     const [circle, label, sub] = g.children;
     circle.setAttribute("cx", n.x); circle.setAttribute("cy", n.y);
-    circle.setAttribute("fill", p ? PAL.cmp : PAL.base);
+    circle.setAttribute("fill", p ? PAL.cmp : n.done ? PAL.done : PAL.base);
     label.setAttribute("x", n.x); label.setAttribute("y", n.y + 8);
     label.setAttribute("fill", p ? "#fff" : "#101010");
     label.textContent = n.label;
@@ -1446,16 +1541,19 @@ function drawVars(step, figure) {
 }
 
 /** A stack/queue chip must show its live part, not the scratch space behind it. */
+// An array-backed stack or queue is only as long as its counter says. Before that
+// counter comes into scope the backing array is still all zeroes, and showing it
+// raw drew six blank cells and a "top ↑" tag over a stack that holds nothing.
 function liveSlice(name, value, step) {
   const spec = roles[name];
   if (!spec || !Array.isArray(value)) return value;
   if (spec.role === "stack") {
     const top = step.vars[spec.top];
-    return Number.isInteger(top) ? value.slice(0, Math.max(0, Math.min(top, value.length))) : value;
+    return Number.isInteger(top) ? value.slice(0, Math.max(0, Math.min(top, value.length))) : [];
   }
   const from = step.vars[spec.from], to = step.vars[spec.to];
   return Number.isInteger(from) && Number.isInteger(to)
-    ? value.slice(Math.max(0, from), Math.max(0, Math.min(to, value.length))) : value;
+    ? value.slice(Math.max(0, from), Math.max(0, Math.min(to, value.length))) : [];
 }
 
 function drawStats() {
