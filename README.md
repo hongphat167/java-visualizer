@@ -41,13 +41,17 @@ java Visualizer.java --selftest   # compile + trace a bubble sort, assert the re
 **Home** — a catalog of 54 classic algorithms across 11 categories, generated
 from `presets.js` (add an entry there and the catalog picks it up automatically).
 
+The view kind is decided **once per run**, not per step, so the figure never
+changes shape while you scrub — a temporary local array can't hijack the panel
+from the array the algorithm is actually about.
+
 **Visualizer** — five synchronized panels:
 
 | Panel | Shows |
 | --- | --- |
-| Editor | your Java source; stop typing for 900 ms and it re-traces automatically |
-| Running line | the source with the executing line highlighted |
-| Figure | the data structure, animated — bars, boxes, matrix, pointers |
+| Controls | category tabs, algorithm tabs, an editable input array, an optional target, Run |
+| Figure | one view for the whole run — bars, node-link graph, DP table or linear cells |
+| Code | the running line highlighted; `✎ SỬA CODE / EDIT` swaps it for a textarea so you can paste your own Java, saved per algorithm |
 | What's happening | one sentence per step, in Vietnamese and English |
 | Step log · Stack · Output | the last 9 narrations, the call stack, the program's stdout |
 

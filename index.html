@@ -16,6 +16,7 @@
     --dur: 220ms; --ease: cubic-bezier(.4, 0, .2, 1);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  [hidden] { display: none !important; }   /* our display rules must not beat it */
   html, body { background: var(--paper); }
   body { color: var(--ink); font-family: var(--sans); font-size: 14px; }
   ::selection { background: var(--base); }
@@ -178,7 +179,20 @@
 
   .code { border: 4px solid var(--ink); background: var(--ink); box-shadow: 8px 8px 0 var(--ink); }
   .code .file { border-bottom: 3px solid var(--base); padding: 10px 14px; font-family: var(--mono);
-                font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--base); }
+                font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--base);
+                display: flex; gap: 10px; align-items: center; justify-content: space-between;
+                flex-wrap: wrap; }
+  .ebtn { border: 2px solid var(--base); background: transparent; color: var(--base);
+          padding: 5px 10px; font-family: var(--mono); font-size: 11px; font-weight: 700; cursor: pointer; }
+  .ebtn.on { background: var(--base); color: var(--ink); }
+  .ebtn.save { border: 3px solid var(--base); background: var(--base); color: var(--ink);
+               padding: 9px 16px; font-size: 12px; }
+  .ebtn.cancel { border: 3px solid #5a5a5a; color: #E8E8E8; padding: 9px 16px; font-size: 12px; }
+  .editor { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .editor .hint { font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #9a9a9a; }
+  .editor textarea { width: 100%; min-height: 280px; border: 3px solid var(--base); background: #1c1c1c;
+                     color: #E8E8E8; padding: 10px; font-family: var(--mono); font-size: 12.5px;
+                     line-height: 1.55; resize: vertical; }
   .code .lines { padding: 12px 0; overflow: auto; max-height: 60vh; }
   .code .lines div { display: flex; gap: 12px; padding: 3px 14px;
                      transition: background var(--dur) var(--ease); }
@@ -319,7 +333,23 @@
 
     <div class="side">
       <div class="code">
-        <div class="file" id="fileName">Main.java</div>
+        <div class="file">
+          <span id="fileName">Main.java</span>
+          <span style="display:flex;gap:6px">
+            <button id="editToggle" class="ebtn">✎ SỬA CODE / EDIT</button>
+            <button id="restoreCode" class="ebtn" hidden>KHÔI PHỤC</button>
+          </span>
+        </div>
+        <div class="editor" id="editor" hidden>
+          <div class="hint">Dán code Java của bạn vào đây. Dòng đang chạy vẫn được tô sáng theo số dòng
+            của bước hiện tại.<br>Paste your own Java here — the running line is still highlighted by
+            the current step's line number.</div>
+          <textarea id="draft" spellcheck="false"></textarea>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="saveCode" class="ebtn save">LƯU / SAVE</button>
+            <button id="cancelEdit" class="ebtn cancel">HUỶ / CANCEL</button>
+          </div>
+        </div>
         <div class="lines" id="codeLines"></div>
       </div>
       <div class="stats">
@@ -348,6 +378,7 @@ const PAL = { base: "var(--base)", cmp: "var(--cmp)", swap: "var(--swap)",
 let steps = [], notes = [], at = 0, timer = null, lines = [], running = false;
 let constant = new Set(), graphVars = new Set(), treeVars = new Set(), forestVars = new Set();
 let speed = 1, lang = "both", algo = "", pendingStep = null;
+let userCode = {}, figureSpec = null, carried = null;
 const views = new Map();
 
 const CODE = {};
@@ -429,14 +460,16 @@ function syncControls() {
   $("algoTabs").innerHTML = Object.keys(PRESETS[group]).map(name =>
     `<button class="btn ${name === algo ? "on" : ""}" data-algo="${esc(name)}">${esc(name)}</button>`).join("");
 
-  const source = CODE[algo];
+  const source = userCode[algo] || CODE[algo];
   const arr = readArray(source);
   $("inputWrap").hidden = !arr.length;
   $("input").value = arr.join(", ");
   const target = readTarget(source);
   $("targetWrap").hidden = target === null;
   $("target").value = target === null ? "" : target;
-  $("fileName").textContent = "Main.java · " + algo.toUpperCase();
+  $("fileName").textContent = "Main.java · " + algo.toUpperCase()
+    + (userCode[algo] ? " · CODE CỦA BẠN" : "");
+  $("restoreCode").hidden = !userCode[algo];
 }
 $("catTabs").onclick = e => {
   const id = e.target.closest("[data-cat]")?.dataset.cat;
@@ -447,11 +480,38 @@ $("algoTabs").onclick = e => {
   if (name) openAlgo(name);
 };
 $("randomize").onclick = () => {
-  const n = Math.max(4, readArray(CODE[algo]).length);
+  const n = Math.max(4, readArray(userCode[algo] || CODE[algo]).length);
   $("input").value = Array.from({ length: n }, () => 1 + Math.floor(Math.random() * 20)).join(", ");
   build();
 };
 $("build").onclick = build;
+
+/* the design's code editor: edit -> save (per algorithm) -> restore */
+function setEditing(on) {
+  $("editor").hidden = !on;
+  $("codeLines").hidden = on;
+  $("editToggle").textContent = on ? "ĐANG SỬA" : "✎ SỬA CODE / EDIT";
+  $("editToggle").classList.toggle("on", on);
+}
+$("editToggle").onclick = () => {
+  const on = $("editor").hidden;
+  if (on) $("draft").value = userCode[algo] || CODE[algo];
+  setEditing(on);
+};
+$("cancelEdit").onclick = () => setEditing(false);
+$("saveCode").onclick = () => {
+  const draft = $("draft").value.trim();
+  if (draft) userCode[algo] = draft; else delete userCode[algo];
+  setEditing(false);
+  syncControls();
+  build();
+};
+$("restoreCode").onclick = () => {
+  delete userCode[algo];
+  setEditing(false);
+  syncControls();
+  build();
+};
 $("input").onkeydown = e => { if (e.key === "Enter") build(); };
 $("target").onkeydown = e => { if (e.key === "Enter") build(); };
 
@@ -469,7 +529,7 @@ function readTarget(source) {
 }
 /** Applies the input boxes back into the source before tracing. */
 function sourceWithInput() {
-  let source = CODE[algo];
+  let source = userCode[algo] || CODE[algo];
   const wanted = $("input").value.split(",").map(x => parseInt(x, 10)).filter(Number.isInteger);
   if (wanted.length && readArray(source).length) {
     source = source.replace(ARRAY_LITERAL, m => m.replace(/\{[^{}]*\}/, "{" + wanted.join(", ") + "}"));
@@ -547,6 +607,8 @@ async function build() {
     graphVars = findGraphVars(steps);
     treeVars = findTreeVars(steps);
     forestVars = findForestVars(steps);
+    figureSpec = chooseFigure(steps);
+    carried = null;
     notes = steps.map((s, i) => describe(i > 0 ? steps[i - 1] : null, s));
     $("scrub").max = steps.length - 1;
     at = pendingStep !== null ? Math.max(0, Math.min(steps.length - 1, pendingStep)) : 0;
@@ -658,36 +720,65 @@ function textOf(o) {
 }
 const typeName = o => String(o.__type || "").replace(/.*\./, "");
 
-/** The design shows one figure per step; pick the structure the run is about. */
-function pickFigure(step) {
-  const vars = Object.entries(step.vars);
-  for (const [name, v] of vars) if (graphVars.has(name)) return { kind: "graph", name, data: v };
-  for (const [name, v] of vars) if (treeVars.has(name)) return { kind: "tree", name, data: v };
-  for (const [name, v] of vars) if (forestVars.has(name)) return { kind: "forest", name, data: v };
-  for (const [name, v] of vars) {
-    if (v && typeof v === "object" && !Array.isArray(v) && ("left" in v || "right" in v)) {
-      const t = objTree(v);
-      if (t.nodes.length) return { kind: "nodes", name, data: t };
+/** The design pins one view kind per algorithm, so the figure never changes
+ *  shape mid-run. Classify every variable once, then keep the best candidate. */
+function kindOf(name, v) {
+  if (graphVars.has(name)) return "graph";
+  if (treeVars.has(name)) return "tree";
+  if (forestVars.has(name)) return "forest";
+  if (v && typeof v === "object" && !Array.isArray(v) && ("left" in v || "right" in v)) return "nodes";
+  if (Array.isArray(v) && v.length && v.every(r => Array.isArray(r) && r.every(x => typeof x === "number")))
+    return "table";
+  if (Array.isArray(v) && v.length && v.every(x => typeof x === "number")
+      && !(constant.has(name) && v.length <= 4)) return "bars";
+  if (typeof v === "string" && v.length > 1) return "linear";
+  if (Array.isArray(v) && v.length) return "linear";
+  if (unwrap(v) || unwrapList(v) || unwrapMap(v)) return "linear";
+  return null;
+}
+
+const KIND_RANK = { graph: 0, tree: 1, forest: 2, nodes: 3, table: 4, bars: 5, linear: 6 };
+
+function chooseFigure(steps) {
+  const seen = new Map();
+  for (const s of steps) {
+    for (const [name, v] of Object.entries(s.vars)) {
+      const kind = kindOf(name, v);
+      if (!kind) continue;
+      const e = seen.get(name) || { name, kind, count: 0 };
+      e.kind = kind;                       // last classification wins; kinds are stable per name
+      e.count++;
+      seen.set(name, e);
     }
   }
-  for (const [name, v] of vars) {
-    if (Array.isArray(v) && v.length && v.every(r => Array.isArray(r) && r.every(x => typeof x === "number")))
-      return { kind: "table", name, data: v };
+  const all = [...seen.values()];
+  if (!all.length) return null;
+  all.sort((a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind] || b.count - a.count);
+  return all[0];
+}
+
+/** Data for the pinned figure at this step; keeps the last value while the
+ *  variable is out of scope so the view never blanks out mid-run. */
+function figureData(step) {
+  if (!figureSpec) return null;
+  const raw = step.vars[figureSpec.name];
+  if (raw !== undefined) carried = raw;
+  const v = carried;
+  if (v === undefined || v === null) return null;
+  if (figureSpec.kind === "nodes") {
+    const t = objTree(v);
+    return t.nodes.length ? t : null;
   }
-  for (const [name, v] of vars) {
-    if (Array.isArray(v) && v.length && v.every(x => typeof x === "number")
-        && !(constant.has(name) && v.length <= 4)) return { kind: "bars", name, data: v };
-  }
-  for (const [name, v] of vars) {
-    if (typeof v === "string" && v.length > 1) return { kind: "linear", name, data: [...v] };
-    if (Array.isArray(v) && v.length) return { kind: "linear", name, data: v };
+  if (figureSpec.kind === "linear") {
+    if (typeof v === "string") return [...v];
+    if (Array.isArray(v)) return v;
     const items = unwrap(v) || unwrapList(v);
-    if (items && items.length) return { kind: "linear", name: name + " · " + typeName(v), data: items };
+    if (items) return items;
     const pairs = unwrapMap(v);
-    if (pairs && pairs.length) return { kind: "linear", name: name + " · " + typeName(v),
-                                        data: pairs.map(([k, x]) => k + "→" + x) };
+    if (pairs) return pairs.map(([k, x]) => k + "→" + x);
+    return null;
   }
-  return null;
+  return Array.isArray(v) ? v : null;
 }
 
 /* ---------------- narration ---------------- */
@@ -733,7 +824,8 @@ function describe(prev, step) {
 function render() {
   const step = steps[at], prev = at > 0 ? steps[at - 1] : null;
   const pointers = findPointers(step.vars);
-  const figure = pickFigure(step);
+  const data = figureData(step);
+  const figure = data ? { kind: figureSpec.kind, name: figureSpec.name, data } : null;
 
   $("stepNo").textContent = `step ${at + 1} / ${steps.length}`;
   $("scrub").value = at;
@@ -769,6 +861,7 @@ function drawFigure(figure, step, prev, pointers) {
   }
   const key = figure.kind + ":" + figure.name;
   if (views.get("key") !== key) { stage.innerHTML = ""; views.clear(); views.set("key", key); }
+  
   const before = prev ? prev.vars[figure.name] : undefined;
 
   if (figure.kind === "bars") return drawBars(stage, figure.data, before, pointers);
