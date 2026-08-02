@@ -35,9 +35,31 @@ algorithms: it fails if a view does not match its declaration in `presets.js`,
 changes shape mid-run, has no data, or throws on any step.
 
 > **Security:** this compiles and executes arbitrary user-submitted Java in a
-> child JVM with **no sandbox**. It binds to `127.0.0.1` only and caps each run
-> at 15 seconds / 4000 steps. Do not expose the port to a network or deploy it
-> on a shared host without container/seccomp isolation first.
+> child JVM with **no sandbox**. Locally it binds to `127.0.0.1` and caps each
+> run at 15 seconds / 4000 steps. Anyone who can reach `/api/trace` can run code
+> on the host, so the server **refuses to listen on a public interface** unless
+> `VIZ_USER` / `VIZ_PASS` are set, and even then treat it as a trusted-users-only
+> tool: give the container no egress, a read-only filesystem, and CPU/memory/pid
+> limits.
+
+## Deploying
+
+`PORT` switches it into hosted mode: it binds `0.0.0.0` (override with
+`VIZ_HOST`) and requires basic-auth credentials.
+
+```bash
+docker build -t java-viz .
+docker run -p 8080:8080 -e VIZ_USER=demo -e VIZ_PASS=... java-viz
+```
+
+`render.yaml` deploys the bundled `Dockerfile` on Render's free plan — set
+`VIZ_USER` and `VIZ_PASS` in the dashboard, or the service starts and exits with
+a refusal in the log. Koyeb and Cloud Run work from the same Dockerfile. Netlify
+and Vercel functions cannot host it: there is no JVM, and the tracer needs a full
+JDK (`javax.tools` plus the `jdk.jdi` module) and the right to spawn a child JVM.
+
+For a public demo with no code execution at all, pre-render the traces and serve
+them statically instead.
 
 ---
 

@@ -4,6 +4,8 @@ import com.sun.jdi.connect.LaunchingConnector;
 import com.sun.jdi.event.*;
 import com.sun.jdi.request.ClassPrepareRequest;
 import com.sun.jdi.request.StepRequest;
+import com.sun.net.httpserver.BasicAuthenticator;
+import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -49,13 +51,39 @@ public class Visualizer {
             selfTest();
             return;
         }
-        int port = argv.length > 0 ? Integer.parseInt(argv[0]) : 8088;
-        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
-        server.createContext("/", Visualizer::serveIndex);
-        server.createContext("/api/trace", Visualizer::serveTrace);
+        // PORT is what Render/Koyeb/Cloud Run inject; a container must bind 0.0.0.0
+        String env = System.getenv("PORT");
+        int port = argv.length > 0 ? Integer.parseInt(argv[0])
+                 : env != null ? Integer.parseInt(env) : 8088;
+        boolean hosted = env != null;
+        String host = System.getenv().getOrDefault("VIZ_HOST", hosted ? "0.0.0.0" : "127.0.0.1");
+
+        HttpServer server = HttpServer.create(new InetSocketAddress(host, port), 0);
+        HttpContext ui = server.createContext("/", Visualizer::serveIndex);
+        HttpContext api = server.createContext("/api/trace", Visualizer::serveTrace);
+
+        // This endpoint compiles and runs whatever it is sent, so a reachable
+        // instance must be behind a password. Refuse to open up without one.
+        String user = System.getenv("VIZ_USER"), pass = System.getenv("VIZ_PASS");
+        if (user != null && pass != null && !pass.isBlank()) {
+            BasicAuthenticator gate = new BasicAuthenticator("java-viz") {
+                @Override
+                public boolean checkCredentials(String u, String p) {
+                    return user.equals(u) && pass.equals(p);
+                }
+            };
+            ui.setAuthenticator(gate);
+            api.setAuthenticator(gate);
+        } else if (!host.equals("127.0.0.1") && !host.equals("localhost")) {
+            System.err.println("Refusing to listen on " + host + " without VIZ_USER/VIZ_PASS:"
+                    + " this server executes arbitrary submitted Java.");
+            return;
+        }
+
         server.setExecutor(Executors.newFixedThreadPool(2));
         server.start();
-        System.out.println("Algorithm visualizer: http://127.0.0.1:" + port);
+        System.out.println("Algorithm visualizer on " + host + ":" + port
+                + (user != null ? " (basic auth on)" : " (local only)"));
     }
 
     // ---------- HTTP ----------
