@@ -607,6 +607,7 @@ async function build() {
     graphVars = findGraphVars(steps);
     treeVars = findTreeVars(steps);
     forestVars = findForestVars(steps);
+    roles = findRoles(steps);
     figureSpec = chooseFigure(steps);
     carried = null;
     notes = steps.map((s, i) => describe(i > 0 ? steps[i - 1] : null, s));
@@ -644,6 +645,31 @@ const NODE_POINTERS = ["i", "j", "k", "u", "v", "cur", "curr", "node", "idx", "i
                        "next", "p", "q", "r", "c", "root", "top", "head", "tail", "step"];
 const WINDOWS = [["lo", "hi"], ["low", "high"], ["left", "right"], ["start", "end"], ["first", "last"]];
 const SUB_NAMES = ["dist", "d", "done", "visited", "order", "color", "parent", "indegree", "seen"];
+
+// A backing array is only a stack/queue together with the scalars that bound its
+// live part; the rest of the array is scratch space and must not be drawn.
+// ponytail: recognised by name (stack/stk/queue/deque + top/head/tail/<name>Top).
+let roles = {};
+function findRoles(steps) {
+  const scalars = new Set(), out = {};
+  for (const s of steps) {
+    for (const [k, v] of Object.entries(s.vars)) if (Number.isInteger(v)) scalars.add(k);
+  }
+  for (const s of steps) {
+    for (const [k, v] of Object.entries(s.vars)) {
+      if (out[k]) continue;
+      if (Array.isArray(v)) {
+        if (scalars.has(k + "Top")) out[k] = { role: "stack", top: k + "Top" };
+        else if (/stack|stk/i.test(k) && scalars.has("top")) out[k] = { role: "stack", top: "top" };
+        else if (/queue|deque/i.test(k) && scalars.has("head") && scalars.has("tail"))
+          out[k] = { role: "queue", from: "head", to: "tail" };
+      } else if (unwrap(v) && /queue|deque/i.test(k)) {
+        out[k] = { role: "queue" };            // a real Deque already holds only live items
+      }
+    }
+  }
+  return out;
+}
 
 function findGraphVars(steps) {
   const last = {};
@@ -723,6 +749,7 @@ const typeName = o => String(o.__type || "").replace(/.*\./, "");
 /** The design pins one view kind per algorithm, so the figure never changes
  *  shape mid-run. Classify every variable once, then keep the best candidate. */
 function kindOf(name, v) {
+  if (roles[name]) return roles[name].role;
   if (graphVars.has(name)) return "graph";
   if (treeVars.has(name)) return "tree";
   if (forestVars.has(name)) return "forest";
@@ -737,7 +764,8 @@ function kindOf(name, v) {
   return null;
 }
 
-const KIND_RANK = { graph: 0, tree: 1, forest: 2, nodes: 3, table: 4, bars: 5, linear: 6 };
+const KIND_RANK = { graph: 0, tree: 1, forest: 2, nodes: 3, table: 4,
+                    stack: 4.5, queue: 4.5, bars: 5, linear: 6 };
 
 function chooseFigure(steps) {
   const seen = new Map();
@@ -745,6 +773,11 @@ function chooseFigure(steps) {
     for (const [name, v] of Object.entries(s.vars)) {
       const kind = kindOf(name, v);
       if (!kind) continue;
+      // an always-empty stack/queue must not win the panel from its busy sibling
+      if (kind === "stack" || kind === "queue") {
+        const live = liveSlice(name, v, s);
+        if (!Array.isArray(live) || !live.length) continue;
+      }
       const e = seen.get(name) || { name, kind, count: 0 };
       e.kind = kind;                       // last classification wins; kinds are stable per name
       e.count++;
@@ -768,6 +801,17 @@ function figureData(step) {
   if (figureSpec.kind === "nodes") {
     const t = objTree(v);
     return t.nodes.length ? t : null;
+  }
+  if (figureSpec.kind === "stack" || figureSpec.kind === "queue") {
+    const spec = roles[figureSpec.name] || {};
+    const items = Array.isArray(v) ? v : (unwrap(v) || []);
+    if (figureSpec.kind === "stack") {
+      const top = step.vars[spec.top];
+      return Number.isInteger(top) ? items.slice(0, Math.max(0, Math.min(top, items.length))) : items;
+    }
+    const from = step.vars[spec.from], to = step.vars[spec.to];
+    return Number.isInteger(from) && Number.isInteger(to)
+      ? items.slice(Math.max(0, from), Math.max(0, Math.min(to, items.length))) : items;
   }
   if (figureSpec.kind === "linear") {
     if (typeof v === "string") return [...v];
@@ -866,7 +910,9 @@ function drawFigure(figure, step, prev, pointers) {
 
   if (figure.kind === "bars") return drawBars(stage, figure.data, before, pointers);
   if (figure.kind === "table") return drawTable(stage, figure.data, before);
-  if (figure.kind === "linear") return drawLinear(stage, figure.data, before, pointers);
+  if (figure.kind === "linear") return drawLinear(stage, figure.data, before, pointers, null);
+  if (figure.kind === "stack") return drawLinear(stage, figure.data, before, [], "stack");
+  if (figure.kind === "queue") return drawLinear(stage, figure.data, before, [], "queue");
   const net = figure.kind === "graph" ? matrixGraph(figure.data, subLabels(step, figure.data.length))
             : figure.kind === "tree" ? arrayTree(figure.data)
             : figure.kind === "forest" ? parentForest(figure.data) : figure.data;
@@ -960,9 +1006,16 @@ function drawTable(stage, rows, before) {
 }
 
 /* -- linear cells (design: 78px boxes with a tag underneath) -- */
-function drawLinear(stage, data, before, pointers) {
+function drawLinear(stage, data, before, pointers, role) {
   let set = stage.querySelector(".set");
   if (!set) { stage.innerHTML = `<div class="linear"><div class="set"></div></div>`; set = stage.querySelector(".set"); }
+  // a stack grows upwards (the design uses column-reverse), a queue runs left to right
+  set.style.flexDirection = role === "stack" ? "column-reverse" : "row";
+  if (!data.length) {
+    set.innerHTML = `<div class="mono" style="opacity:.6">${role === "stack" ? "Ngăn xếp rỗng / empty stack"
+      : role === "queue" ? "Hàng đợi rỗng / empty queue" : "—"}</div>`;
+    return;
+  }
   sync(set, data.length, () => {
     const item = document.createElement("div");
     item.className = "item";
@@ -977,11 +1030,18 @@ function drawLinear(stage, data, before, pointers) {
     const changed = Array.isArray(before) && before[i] !== undefined
                     && JSON.stringify(before[i]) !== JSON.stringify(v);
     const names = byIndex.get(i);
+    // design: stack tags the last cell "top ↑"; a queue tags its two ends
+    const edge = role === "stack" ? (i === data.length - 1 ? "top ↑" : "")
+               : role === "queue" ? (i === 0 ? "front" : i === data.length - 1 ? "rear" : "")
+               : null;
     const box = item.querySelector(".box");
     box.textContent = text;
-    box.style.background = changed ? PAL.swap : names ? PAL.cmp : v === 1 || v === true ? PAL.done : "#fff";
+    box.style.background = changed ? PAL.swap
+                         : names ? PAL.cmp
+                         : edge ? PAL.base
+                         : (!role && (v === 1 || v === true)) ? PAL.done : "#fff";
     box.style.color = (changed || names) ? "#fff" : "var(--ink)";
-    item.querySelector(".tag").textContent = names ? names.join(" ") : String(i);
+    item.querySelector(".tag").textContent = edge !== null ? edge : (names ? names.join(" ") : String(i));
   });
 }
 
@@ -1133,9 +1193,22 @@ function drawVars(step, figure) {
   [...set.children].forEach((chip, i) => {
     const [name, value] = shown[i];
     chip.querySelector("span").textContent = name + " =";
-    chip.querySelector("b").textContent = fmt(value);
+    chip.querySelector("b").textContent = fmt(liveSlice(name, value, step));
   });
   if (!shown.length) set.innerHTML = `<div class="chip"><span>—</span></div>`;
+}
+
+/** A stack/queue chip must show its live part, not the scratch space behind it. */
+function liveSlice(name, value, step) {
+  const spec = roles[name];
+  if (!spec || !Array.isArray(value)) return value;
+  if (spec.role === "stack") {
+    const top = step.vars[spec.top];
+    return Number.isInteger(top) ? value.slice(0, Math.max(0, Math.min(top, value.length))) : value;
+  }
+  const from = step.vars[spec.from], to = step.vars[spec.to];
+  return Number.isInteger(from) && Number.isInteger(to)
+    ? value.slice(Math.max(0, from), Math.max(0, Math.min(to, value.length))) : value;
 }
 
 function drawStats() {

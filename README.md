@@ -70,6 +70,8 @@ Playback: step forward/back, jump to first/last, scrub to any step, play at
 | `int[] tree` / `heap` (heap-encoded, `-1` = empty) | **binary tree** drawn by depth |
 | a node object with `left`/`right` | **binary tree** laid out in-order |
 | `int[] parent` (valid indices) | **disjoint-set forest**, one arrow per node to its parent |
+| array + a `top` counter, named `stack`/`stk` (or `X` beside `XTop`) | **stack** — only the live cells, growing upwards, the last tagged `top ↑` |
+| array + `head`/`tail`, named `queue`/`deque`, or a real `ArrayDeque` | **queue** — live cells left to right, ends tagged `front` / `rear` |
 | `String` | character boxes |
 | `ArrayList`, `ArrayDeque` | contents in real order (the deque's circular buffer is unwrapped) |
 | linked-list nodes (`next` + `val`/`value`/`data`) | the chain, followed up to 64 nodes |
@@ -194,6 +196,9 @@ http://127.0.0.1:8088/#Union-Find (DSU)@50
 - **Step cap.** 4000 steps or 15 seconds per run, whichever comes first; the
   status line reports a truncated run.
 - **One class.** Your code must fit in a single `Main.java`.
+- **Stack/queue recognition is conventional too.** The backing array is only
+  sliced to its live part when the bounding counters are found by name
+  (`top`, `<name>Top`, `head`/`tail`); otherwise the whole array is drawn.
 - **Tree/forest detection is conventional.** A heap-encoded tree must be called
   `tree`/`heap`/`bst` and a disjoint set `parent`/`par`/`leader`; rename them and
   they fall back to a box row. Adjacency matrices are detected structurally
