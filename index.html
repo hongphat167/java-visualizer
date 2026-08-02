@@ -311,7 +311,7 @@
       </div>
     </div>
     <div class="fix-130" id="targetWrap" hidden>
-      <div class="lbl">MỤC TIÊU / TARGET</div>
+      <div class="lbl" id="targetLabel">MỤC TIÊU / TARGET</div>
       <input type="text" id="target" style="width:100%;border:3px solid var(--ink);padding:10px;font-family:var(--mono);font-size:13px;background:var(--paper)">
     </div>
     <button class="run" id="build">Áp dụng / Run</button>
@@ -518,6 +518,7 @@ function syncControls() {
   $("input").value = arr.join(", ");
   const target = readTarget(source);
   $("targetWrap").hidden = target === null;
+  $("targetLabel").textContent = targetSpec()[1];
   $("target").value = target === null ? "" : target;
   $("fileName").textContent = "Main.java · " + algo.toUpperCase()
     + (userCode[algo] ? " · CODE CỦA BẠN" : "");
@@ -575,8 +576,11 @@ function readArray(source) {
   if (!m) return [];
   return m[0].slice(m[0].indexOf("{") + 1, -1).split(",").map(x => +x.trim());
 }
+function targetSpec() {
+  return TARGETS[algo] || ["target", "MỤC TIÊU / TARGET"];
+}
 function readTarget(source) {
-  const m = source.match(/\bint\s+target\s*=\s*(-?\d+)/);
+  const m = source.match(new RegExp("\\bint\\s+" + targetSpec()[0] + "\\s*=\\s*(-?\\d+)"));
   return m ? +m[1] : null;
 }
 /** Applies the input boxes back into the source before tracing. */
@@ -588,7 +592,7 @@ function sourceWithInput() {
   }
   const target = parseInt($("target").value, 10);
   if (Number.isInteger(target) && readTarget(source) !== null) {
-    source = source.replace(/(\bint\s+target\s*=\s*)-?\d+/, "$1" + target);
+    source = source.replace(new RegExp("(\\bint\\s+" + targetSpec()[0] + "\\s*=\\s*)-?\\d+"), "$1" + target);
   }
   return source;
 }
@@ -1086,13 +1090,18 @@ function drawBars(stage, data, before, pointers) {
   const base = Math.min(0, ...(infinite ? real : data));
   const span = Math.max(...(infinite ? real : data)) - base || 1;
   const hit = new Set(pointers.map(p => p.idx));
+  // gen_dedupe marks rng(write) as settled — the kept prefix behind a write pointer
+  const settled = pointers.find(p => p.name === "write");
   [...bars.children].forEach((col, i) => {
     const v = data[i], isInf = infinite && v >= 90;
     const changed = Array.isArray(before) && before[i] !== undefined && before[i] !== v;
     col.querySelector(".v").textContent = data.length <= 30 ? (isInf ? "∞" : v) : "";
     const bar = col.querySelector(".bar");
     bar.style.height = isInf ? "100%" : Math.max(3, (v - base) / span * 92) + "%";
-    bar.style.background = changed ? PAL.swap : hit.has(i) ? PAL.cmp : isInf ? "var(--paper)" : PAL.base;
+    bar.style.background = changed ? PAL.swap
+                         : hit.has(i) ? PAL.cmp
+                         : settled && i < settled.idx ? PAL.done
+                         : isInf ? "var(--paper)" : PAL.base;
     col.title = `[${i}] = ${v}`;
     axis.children[i].textContent = i;
   });

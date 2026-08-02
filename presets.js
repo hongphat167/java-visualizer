@@ -1049,6 +1049,7 @@ const CATS = [
   ["Trees", "Cây / Trees"],
   ["Graphs", "Đồ thị / Graph"],
   ["Dynamic programming", "QHĐ / DP"],
+  ["Two pointers", "Hai con trỏ / Two Pointers"],
   ["Backtracking", "Đệ quy / Backtracking"],
   ["Math", "Toán / Math"]
 ];
@@ -1076,7 +1077,7 @@ const VIEW = {
   "Prefix sums — range query": "table",
   "Dutch national flag (sort 0/1/2)": "linear",
   "Reverse & rotate in place": "linear",
-  "Remove duplicates (sorted)": "linear",
+  "Remove duplicates (sorted)": "bars",
   "Moore majority vote": "linear",
 
   "Palindrome check": "linear",
@@ -1121,4 +1122,26 @@ const VIEW = {
   "Sieve of Eratosthenes": "linear",
   "Fast power (binary exponentiation)": "none",
   "Prime check (trial division)": "none"
+};
+
+// The design collects these four under its "ptr" category, so regroup instead of
+// leaving them scattered across Searching / Arrays / Linked list.
+PRESETS["Two pointers"] = {};
+for (const name of ["Two pointers — pair sum", "Sliding window — max sum of k",
+                    "Remove duplicates (sorted)", "Floyd cycle detection"]) {
+  for (const group of Object.keys(PRESETS)) {
+    if (group === "Two pointers" || !PRESETS[group][name]) continue;
+    PRESETS["Two pointers"][name] = PRESETS[group][name];
+    delete PRESETS[group][name];
+  }
+}
+
+// The design labels each algorithm's second input itself (tgt / tgtLabel).
+const TARGETS = {
+  "Two pointers — pair sum": ["target", "TỔNG CẦN / TARGET"],
+  "Sliding window — max sum of k": ["k", "ĐỘ RỘNG K / SIZE K"],
+  "Binary search": ["target", "MỤC TIÊU / TARGET"],
+  "Linear search": ["target", "MỤC TIÊU / TARGET"],
+  "BST insert & search": ["target", "MỤC TIÊU / TARGET"],
+  "Coin change (min coins)": ["target", "SỐ TIỀN / AMOUNT"]
 };

@@ -43,7 +43,7 @@ changes shape mid-run, has no data, or throws on any step.
 
 ## What you get
 
-**Home** — a catalog of 54 classic algorithms across 11 categories, generated
+**Home** — a catalog of 54 classic algorithms across 12 categories, generated
 from `presets.js` (add an entry there and the catalog picks it up automatically).
 
 The view kind is decided **once per run**, not per step, so the figure never
