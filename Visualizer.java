@@ -457,6 +457,16 @@ public class Visualizer {
 
     /** Renders a JDI value as JSON. Depth-limited; no method calls into the target VM. */
     private static String json(Value v, int depth) {
+        return json(v, depth, new java.util.HashSet<>());
+    }
+
+    /**
+     * `path` holds the object ids already being serialized above this point. A
+     * doubly linked node reachable as next.prev.next… would otherwise expand in
+     * both directions at every level: a four-node list produced 315KB and blew
+     * past the step deadline on a slow host.
+     */
+    private static String json(Value v, int depth, java.util.Set<Long> path) {
         if (v == null) {
             return "null";
         }
@@ -479,7 +489,7 @@ public class Visualizer {
                 if (i > 0) {
                     sb.append(',');
                 }
-                sb.append(json(values.get(i), depth + 1));
+                sb.append(json(values.get(i), depth + 1, path));
             }
             return sb.append(']').toString();
         }
@@ -490,11 +500,11 @@ public class Visualizer {
             if (type.startsWith("java.lang.")) {
                 Field value = obj.referenceType().fieldByName("value");
                 if (value != null && obj.getValue(value) instanceof PrimitiveValue prim) {
-                    return json(prim, depth);
+                    return json(prim, depth, path);
                 }
             }
-            if (depth > MAX_DEPTH) {   // deep enough to walk a short linked list
-                return q(type + "@" + obj.uniqueID());
+            if (depth > MAX_DEPTH || !path.add(obj.uniqueID())) {
+                return q(type + "@" + obj.uniqueID());   // too deep, or already on this path
             }
             StringBuilder sb = new StringBuilder("{\"__type\":").append(q(type));
             // allFields, not fields: StringBuilder keeps value/count on its superclass
@@ -502,8 +512,9 @@ public class Visualizer {
                 if (f.isStatic()) {
                     continue;
                 }
-                sb.append(',').append(q(f.name())).append(':').append(json(obj.getValue(f), depth + 1));
+                sb.append(',').append(q(f.name())).append(':').append(json(obj.getValue(f), depth + 1, path));
             }
+            path.remove(obj.uniqueID());
             return sb.append('}').toString();
         }
         return q(v.toString());
