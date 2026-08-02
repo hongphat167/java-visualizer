@@ -52,11 +52,37 @@ docker build -t java-viz .
 docker run -p 8080:8080 -e VIZ_USER=demo -e VIZ_PASS=... java-viz
 ```
 
-`render.yaml` deploys the bundled `Dockerfile` on Render's free plan — set
-`VIZ_USER` and `VIZ_PASS` in the dashboard, or the service starts and exits with
-a refusal in the log. Koyeb and Cloud Run work from the same Dockerfile. Netlify
-and Vercel functions cannot host it: there is no JVM, and the tracer needs a full
-JDK (`javax.tools` plus the `jdk.jdi` module) and the right to spawn a child JVM.
+`render.yaml` deploys the bundled `Dockerfile` on Render's free plan. Koyeb and
+Cloud Run work from the same Dockerfile. Netlify and Vercel functions cannot host
+it: there is no JVM, and the tracer needs a full JDK (`javax.tools` plus the
+`jdk.jdi` module) and the right to spawn a child JVM.
+
+Pick one of two postures, or the server refuses to listen publicly:
+
+| Env | Who can use it |
+| --- | --- |
+| `VIZ_USER` + `VIZ_PASS` | basic auth on the UI and the API |
+| `VIZ_PUBLIC=1` | everyone — accepts the risk below |
+
+### What a public instance enforces
+
+Submitted code is refused before `javac` sees it if it mentions file access
+(`java.io`, `java.nio`, `Files`, `Path`), networking (`java.net`, `Socket`,
+`URL`, `HttpClient`), process control (`Runtime`, `ProcessBuilder`,
+`System.exit`), the environment (`System.getenv`), reflection
+(`Class.forName`, `getDeclaredMethod`, `MethodHandles`, `Unsafe`), internal
+packages (`sun.*`, `jdk.*`, `javax.script`), `native` methods, or a `\u` escape
+(javac decodes those before parsing, so they would hide any of the above).
+
+On top of that: 20KB of source, a 64MB heap on one CPU, 15 seconds, 4000 steps,
+60 traces per minute per IP, two child JVMs at a time.
+
+**This is a filter, not a sandbox.** A determined attacker may still find a way
+through, and can always burn CPU. Run a public instance with no secrets in its
+environment, nothing else deployed beside it, and no network it can reach that
+you care about. On Cloud Run each instance is additionally a gVisor sandbox,
+which is a real isolation boundary; Render and Koyeb give you an ordinary
+container.
 
 For a public demo with no code execution at all, pre-render the traces and serve
 them statically instead.

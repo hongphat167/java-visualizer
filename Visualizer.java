@@ -45,6 +45,68 @@ public class Visualizer {
     private static final long TIMEOUT_MS = 15_000;
     private static final int MAX_ARRAY = 200;
     private static final int MAX_DEPTH = 10;
+    private static final int MAX_SOURCE = 20_000;          // bytes of submitted code
+    private static final int RATE_PER_MINUTE = 60;         // traces per client IP
+    private static final int MAX_CONCURRENT = 2;           // child JVMs at once
+
+    /**
+     * Submitted code is compiled and run, so anything that reaches outside the
+     * algorithm itself is refused before javac sees it. A textual gate is not a
+     * sandbox — it is the cheapest layer, under the resource caps and whatever
+     * isolation the host provides.
+     */
+    private static final Map<String, String> FORBIDDEN = new LinkedHashMap<>();
+    static {
+        FORBIDDEN.put("\\\\u", "unicode escapes (javac decodes them before parsing, so they hide names)");
+        FORBIDDEN.put("\\bRuntime\\b", "Runtime");
+        FORBIDDEN.put("\\bProcessBuilder\\b", "ProcessBuilder");
+        FORBIDDEN.put("System\\s*\\.\\s*(exit|getenv|load|loadLibrary|setProperty|setSecurityManager|inheritedChannel)",
+                      "System.exit / System.getenv / System.load");
+        FORBIDDEN.put("\\bjava\\s*\\.\\s*(io|net|nio|lang\\s*\\.\\s*reflect|lang\\s*\\.\\s*invoke)\\b",
+                      "java.io / java.net / java.nio / reflection");
+        FORBIDDEN.put("\\b(File|FileReader|FileWriter|FileInputStream|FileOutputStream|RandomAccessFile|Files|Paths|Path)\\s*[.(<\\[]",
+                      "file access");
+        FORBIDDEN.put("\\b(Socket|ServerSocket|URL|URI|HttpClient|InetAddress|DatagramSocket)\\b", "network access");
+        FORBIDDEN.put("\\bClass\\s*\\.\\s*forName\\b", "Class.forName");
+        FORBIDDEN.put("\\.\\s*(getDeclaredMethod|getDeclaredField|getDeclaredConstructor|getMethod|getField|newInstance|setAccessible)\\s*\\(",
+                      "reflection");
+        FORBIDDEN.put("\\b(MethodHandles|Unsafe|VarHandle)\\b", "low-level handles");
+        FORBIDDEN.put("\\b(sun|jdk|javax\\s*\\.\\s*script|javax\\s*\\.\\s*tools)\\s*\\.", "internal / scripting APIs");
+        FORBIDDEN.put("\\bnative\\b", "native methods");
+    }
+
+    /** Null when the code is acceptable, otherwise the reason to show the user. */
+    static String rejectReason(String code) {
+        if (code.length() > MAX_SOURCE) {
+            return "Code quá dài (giới hạn " + MAX_SOURCE + " ký tự) / source too long";
+        }
+        for (Map.Entry<String, String> rule : FORBIDDEN.entrySet()) {
+            if (java.util.regex.Pattern.compile(rule.getKey()).matcher(code).find()) {
+                return "Không cho phép " + rule.getValue()
+                        + " — bản public chỉ chạy thuật toán thuần / not allowed on the public build";
+            }
+        }
+        return null;
+    }
+
+    // client IP -> timestamps of recent traces, for a crude per-IP rate limit
+    private static final Map<String, List<Long>> RECENT = new LinkedHashMap<>();
+    private static final java.util.concurrent.Semaphore SLOTS =
+            new java.util.concurrent.Semaphore(MAX_CONCURRENT);
+
+    private static synchronized boolean rateLimited(String ip) {
+        long now = System.currentTimeMillis();
+        List<Long> hits = RECENT.computeIfAbsent(ip, k -> new ArrayList<>());
+        hits.removeIf(t -> now - t > 60_000);
+        if (RECENT.size() > 5000) {
+            RECENT.clear();                                // keep the map bounded
+        }
+        if (hits.size() >= RATE_PER_MINUTE) {
+            return true;
+        }
+        hits.add(now);
+        return false;
+    }
 
     public static void main(String[] argv) throws Exception {
         if (argv.length > 0 && argv[0].equals("--selftest")) {
@@ -74,8 +136,12 @@ public class Visualizer {
             };
             ui.setAuthenticator(gate);
             api.setAuthenticator(gate);
+        } else if ("1".equals(System.getenv("VIZ_PUBLIC"))) {
+            System.out.println("VIZ_PUBLIC=1: open to everyone. Submitted code is filtered and"
+                    + " capped, which is not a sandbox — keep no secrets in this environment.");
         } else if (!host.equals("127.0.0.1") && !host.equals("localhost")) {
-            System.err.println("Refusing to listen on " + host + " without VIZ_USER/VIZ_PASS:"
+            System.err.println("Refusing to listen on " + host + " without VIZ_USER/VIZ_PASS"
+                    + " (or VIZ_PUBLIC=1 to accept the risk):"
                     + " this server executes arbitrary submitted Java.");
             return;
         }
@@ -122,12 +188,37 @@ public class Visualizer {
             send(ex, 405, "text/plain", "POST only");
             return;
         }
+        String ip = ex.getRequestHeaders().getFirst("X-Forwarded-For");
+        if (ip == null) {
+            ip = ex.getRemoteAddress().getAddress().getHostAddress();
+        }
+        ip = ip.split(",")[0].trim();
+        // loopback is the developer and the audit script; the limit is for the internet
+        boolean local = ip.equals("127.0.0.1") || ip.equals("::1") || ip.equals("0:0:0:0:0:0:0:1");
+        if (!local && rateLimited(ip)) {
+            send(ex, 429, "application/json; charset=utf-8",
+                 "{\"ok\":false,\"error\":" + q("Quá nhiều lượt chạy, thử lại sau một phút / rate limited") + "}");
+            return;
+        }
         String code = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        String refuse = rejectReason(code);
+        if (refuse != null) {
+            send(ex, 200, "application/json; charset=utf-8",
+                 "{\"ok\":false,\"error\":" + q(refuse) + "}");
+            return;
+        }
         String json;
+        if (!SLOTS.tryAcquire()) {
+            send(ex, 503, "application/json; charset=utf-8",
+                 "{\"ok\":false,\"error\":" + q("Server đang bận, thử lại / busy") + "}");
+            return;
+        }
         try {
             json = run(code);
         } catch (Exception e) {
             json = "{\"ok\":false,\"error\":" + q(e.toString()) + "}";
+        } finally {
+            SLOTS.release();
         }
         send(ex, 200, "application/json; charset=utf-8", json);
     }
@@ -171,7 +262,9 @@ public class Visualizer {
         LaunchingConnector connector = Bootstrap.virtualMachineManager().defaultConnector();
         Map<String, Connector.Argument> args = connector.defaultArguments();
         args.get("main").setValue("Main");
-        args.get("options").setValue("-ea -cp \"" + classDir + "\"");
+        // caps on the traced JVM: a public instance must not hand out the whole box
+        args.get("options").setValue("-ea -Xmx64m -Xss512k -XX:ActiveProcessorCount=1"
+                + " -XX:-UsePerfData -cp \"" + classDir + "\"");
 
         VirtualMachine vm = connector.launch(args);
         StringBuilder stdout = new StringBuilder();

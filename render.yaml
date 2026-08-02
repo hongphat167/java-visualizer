@@ -6,9 +6,14 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /
     envVars:
-      # This server compiles and runs submitted Java. Without these it refuses
-      # to listen on a public interface. Set them in the Render dashboard.
-      - key: VIZ_USER
-        sync: false
-      - key: VIZ_PASS
-        sync: false
+      # Open to everyone. Submitted code is filtered (no file/network/process/
+      # reflection APIs), capped (20KB, 64MB heap, 1 CPU, 15s, 4000 steps) and
+      # rate limited (60/min per IP) — that is defence in depth, not a sandbox.
+      # Keep NO other secrets in this service's environment.
+      - key: VIZ_PUBLIC
+        value: "1"
+      # Prefer a password instead? Drop VIZ_PUBLIC and set these two.
+      # - key: VIZ_USER
+      #   sync: false
+      # - key: VIZ_PASS
+      #   sync: false
