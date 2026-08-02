@@ -1011,9 +1011,16 @@ function drawLinear(stage, data, before, pointers, role) {
   if (!set) { stage.innerHTML = `<div class="linear"><div class="set"></div></div>`; set = stage.querySelector(".set"); }
   // a stack grows upwards (the design uses column-reverse), a queue runs left to right
   set.style.flexDirection = role === "stack" ? "column-reverse" : "row";
+  const note = set.querySelector(".empty");
+  if (note) note.remove();               // same reason as in drawVars: never sync over it
   if (!data.length) {
-    set.innerHTML = `<div class="mono" style="opacity:.6">${role === "stack" ? "Ngăn xếp rỗng / empty stack"
-      : role === "queue" ? "Hàng đợi rỗng / empty queue" : "—"}</div>`;
+    set.innerHTML = "";
+    const empty = document.createElement("div");
+    empty.className = "empty mono";
+    empty.style.opacity = ".6";
+    empty.textContent = role === "stack" ? "Ngăn xếp rỗng / empty stack"
+                      : role === "queue" ? "Hàng đợi rỗng / empty queue" : "—";
+    set.appendChild(empty);
     return;
   }
   sync(set, data.length, () => {
@@ -1184,6 +1191,11 @@ function drawVars(step, figure) {
   const set = $("vars");
   const shown = Object.entries(step.vars)
     .filter(([n, v]) => !(figure && n === figure.name) && !(Array.isArray(v) && !v.length));
+  // The empty-state note must live OUTSIDE the synced set: dropping a bare chip
+  // in here left the next step reusing a chip with no <b>, so every value went
+  // blank from that point on.
+  const note = set.querySelector(".empty");
+  if (note) note.remove();
   sync(set, shown.length, () => {
     const chip = document.createElement("div");
     chip.className = "chip";
@@ -1195,7 +1207,13 @@ function drawVars(step, figure) {
     chip.querySelector("span").textContent = name + " =";
     chip.querySelector("b").textContent = fmt(liveSlice(name, value, step));
   });
-  if (!shown.length) set.innerHTML = `<div class="chip"><span>—</span></div>`;
+  if (!shown.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty mono";
+    empty.style.opacity = ".6";
+    empty.textContent = "—";
+    set.appendChild(empty);
+  }
 }
 
 /** A stack/queue chip must show its live part, not the scratch space behind it. */
