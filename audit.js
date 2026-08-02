@@ -16,17 +16,24 @@ const stub = new Proxy({}, {
 });
 global.document = {
   getElementById: () => stub, createElement: () => stub, createElementNS: () => stub,
-  querySelector: () => null, documentElement: { style: { setProperty() {} } },
+  querySelector: () => null, querySelectorAll: () => [], documentElement: { style: { setProperty() {} } },
   addEventListener() {},
 };
 global.location = { hash: "" };
 global.addEventListener = () => {};
+global.matchMedia = () => ({ matches: false });
 const realFetch = global.fetch;   // the page's own build() must not call out
 global.fetch = () => Promise.reject(new Error("offline"));
 global.window = global;
 
 const presets = fs.readFileSync(DIR + "/presets.js", "utf8").replace(/^const /gm, "globalThis.");
 (0, eval)(presets);
+
+// The page starts its own timers on load, which would keep this process alive —
+// and fetch needs the real ones back, so only the load is stubbed.
+const realTimers = { setInterval, setTimeout, clearInterval, clearTimeout };
+global.setInterval = () => 0;
+global.setTimeout = () => 0;
 
 const html = fs.readFileSync(DIR + "/index.html", "utf8");
 const body = html.slice(html.lastIndexOf("<script>") + 8, html.lastIndexOf("</script>"));
@@ -42,6 +49,8 @@ const body = html.slice(html.lastIndexOf("<script>") + 8, html.lastIndexOf("</sc
   data(step) { return figureData(step); },
   note(prev, step) { return describe(prev, step); },
 };`);
+
+Object.assign(global, realTimers);
 
 (async () => {
   let problems = 0, checked = 0;
@@ -60,7 +69,8 @@ const body = html.slice(html.lastIndexOf("<script>") + 8, html.lastIndexOf("</sc
         for (let i = 0; i < trace.steps.length; i++) {
           const d = __api.data(trace.steps[i]);
           kinds.add(spec ? spec.kind : "none");
-          if (d === null || (Array.isArray(d) && !d.length)) empty++;
+          const len = d && d.items ? d.items.length : Array.isArray(d) ? d.length : d === null ? 0 : 1;
+        if (!len) empty++;
           __api.note(i ? trace.steps[i - 1] : null, trace.steps[i]);
         }
       } catch (e) { threw = e; }

@@ -65,7 +65,13 @@
   .preview { border: 4px solid var(--ink); background: #fff; box-shadow: 10px 10px 0 var(--ink); padding: 22px; }
   .preview .bars { display: flex; align-items: flex-end; gap: 8px; height: 190px;
                    border-bottom: 3px solid var(--ink); }
-  .preview .bars div { flex: 1; border: 3px solid var(--ink); border-bottom: none; }
+  .preview .bars div { flex: 1; border: 3px solid var(--ink); border-bottom: none;
+                       transition: height .34s var(--ease), background .34s var(--ease); }
+
+  /* the design's own entry animation */
+  @keyframes popin { from { transform: translateY(6px); opacity: 0 } to { transform: none; opacity: 1 } }
+  .pop { animation: popin .5s var(--ease) both; animation-delay: var(--d, 0ms); }
+  @media (prefers-reduced-motion: reduce) { .pop { animation: none; } }
   .preview .keys { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;
                    font-family: var(--mono); font-size: 11px; }
   .preview .keys span { border: 2px solid var(--ink); padding: 4px 8px; }
@@ -407,10 +413,13 @@ const ICONS = ["↕", "🔍", "[ ]", "≡", "→", "▣", "⋔", "◈", "∑", "
 const CARD_BG = ["#FFD84D", "#A8E10C", "#FF6B4A", "#C77DFF", "#7ED9F0", "#FFB3C7",
                  "#fff", "#FFD84D", "#A8E10C", "#7ED9F0", "#fff"];
 
+const HERO_SEED = [40, 88, 62, 120, 30, 150, 74, 105, 52];   // the design's heroSeed
+
 function buildHome() {
-  $("heroBars").innerHTML = [40, 88, 62, 120, 30, 150, 74, 105, 52].map((h, i) =>
-    `<div style="height:${h / 1.6}%;background:${[PAL.base, PAL.base, PAL.cmp, PAL.swap, PAL.done,
-      PAL.base, PAL.base, PAL.swap, PAL.base][i]}"></div>`).join("");
+  // design's mapping: slot 3 compares, slot 5 swaps, past 6 is done
+  $("heroBars").innerHTML = HERO_SEED.map((h, i) =>
+    `<div style="height:${h / 1.6}%;background:${i === 3 ? PAL.cmp : i === 5 ? PAL.swap
+      : i > 6 ? PAL.done : PAL.base}"></div>`).join("");
 
   $("catalog").innerHTML = CATS.map(([group, label], i) => {
     const items = Object.keys(PRESETS[group] || {});
@@ -424,10 +433,42 @@ function buildHome() {
       <button data-open="${esc(items[0])}">▶ Chạy thử / Try it</button>
     </div>`;
   }).join("");
+  // popin, staggered, on everything the hero and the catalog are made of
+  const entering = [...document.querySelectorAll(".hero > div > *, .preview, .sect > *, .cat")];
+  entering.forEach((el, i) => {
+    el.classList.add("pop");
+    el.style.setProperty("--d", Math.min(i * 45, 700) + "ms");
+  });
+
   $("catalog").onclick = e => {
     const name = e.target.closest("[data-open]")?.dataset.open;
     if (name) openAlgo(name);
   };
+}
+
+/** Runs the bubble sort the preview legend advertises: compare, swap, done. */
+let heroTimer = null;
+function heroLoop(on) {
+  clearInterval(heroTimer);
+  heroTimer = null;
+  if (!on || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  let a = HERO_SEED.slice(), i = 0, j = 0, sorted = 0;
+  const bars = () => [...$("heroBars").children];
+  heroTimer = setInterval(() => {
+    const cols = bars();
+    if (cols.length !== a.length) return;
+    if (j >= a.length - 1 - sorted) { j = 0; sorted++; }
+    if (sorted >= a.length - 1) { a = HERO_SEED.slice(); i = j = sorted = 0; }
+    if (a[j] > a[j + 1]) { const t = a[j]; a[j] = a[j + 1]; a[j + 1] = t; }
+    const swapped = a[j] !== a[j + 1];
+    cols.forEach((col, k) => {
+      col.style.height = a[k] / 1.6 + "%";
+      col.style.background = k >= a.length - sorted ? PAL.done
+                           : k === j ? (swapped ? PAL.swap : PAL.cmp)
+                           : k === j + 1 ? PAL.cmp : PAL.base;
+    });
+    j++;
+  }, 420);
 }
 
 /* ---------------- routing ---------------- */
@@ -448,6 +489,7 @@ function route() {
   $("app").hidden = !viz;
   $("navHome").classList.toggle("on", !viz);
   $("navViz").classList.toggle("on", viz);
+  heroLoop(!viz);
   if (viz) { syncControls(); build(); } else { stop(); }
 }
 $("navHome").onclick = () => openAlgo(null);
