@@ -1,6 +1,6 @@
 import com.sun.jdi.*;
 import com.sun.jdi.connect.Connector;
-import com.sun.jdi.connect.LaunchingConnector;
+import com.sun.jdi.connect.AttachingConnector;
 import com.sun.jdi.event.*;
 import com.sun.jdi.request.ClassPrepareRequest;
 import com.sun.jdi.request.StepRequest;
@@ -37,7 +37,8 @@ import javax.tools.ToolProvider;
  * Test: java Visualizer.java --selftest
  *
  * SECURITY: this executes arbitrary user-submitted Java in a child JVM with no sandbox.
- * It binds to 127.0.0.1 only. Do not expose this port to a network.
+ * Locally it binds 127.0.0.1. Listening publicly needs VIZ_USER/VIZ_PASS (basic auth)
+ * or VIZ_PUBLIC=1 (open, with the source filter and resource caps as the only defence).
  */
 public class Visualizer {
 
@@ -263,18 +264,58 @@ public class Visualizer {
         return trace(dir);
     }
 
+    /**
+     * Starts the traced JVM ourselves and attaches over a socket, rather than
+     * letting JDI's CommandLineLaunch do both.
+     *
+     * The launching connector reads the child's first output expecting a JDWP
+     * handshake, so anything the JVM prints first — an inherited
+     * JAVA_TOOL_OPTIONS notice, a heap it cannot reserve — surfaces as
+     * "handshake failed - unrecognized message from target VM" with the real
+     * reason thrown away. Doing it by hand lets us clear the child's
+     * environment (which also stops submitted code from reading ours), capture
+     * what it actually said, and report that instead.
+     */
     private static String trace(Path classDir) throws Exception {
-        LaunchingConnector connector = Bootstrap.virtualMachineManager().defaultConnector();
-        Map<String, Connector.Argument> args = connector.defaultArguments();
-        args.get("main").setValue("Main");
-        // caps on the traced JVM: a public instance must not hand out the whole box
-        args.get("options").setValue("-ea -Xmx64m -Xss512k -XX:ActiveProcessorCount=1"
-                + " -XX:-UsePerfData -cp \"" + classDir + "\"");
+        String javaBin = Path.of(System.getProperty("java.home"), "bin", "java").toString();
+        ProcessBuilder pb = new ProcessBuilder(javaBin,
+                "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:0",
+                "-ea", "-Xmx96m", "-Xss1m", "-XX:ActiveProcessorCount=1",
+                "-XX:-UsePerfData", "-XX:TieredStopAtLevel=1",
+                "-cp", classDir.toString(), "Main");
+        pb.environment().clear();                 // no host env reaches the traced code
+        Process child = pb.start();
 
-        VirtualMachine vm = connector.launch(args);
         StringBuilder stdout = new StringBuilder();
-        drain(vm.process().getInputStream(), stdout);
-        drain(vm.process().getErrorStream(), stdout);
+        // jdwp announces its port on the first stdout line, before it suspends
+        java.io.BufferedReader head = new java.io.BufferedReader(
+                new java.io.InputStreamReader(child.getInputStream(), StandardCharsets.UTF_8));
+        int debugPort = -1;
+        String line;
+        while ((line = head.readLine()) != null) {
+            java.util.regex.Matcher m =
+                    java.util.regex.Pattern.compile("address:\\s*(\\d+)").matcher(line);
+            if (m.find()) {
+                debugPort = Integer.parseInt(m.group(1));
+                break;
+            }
+            stdout.append(line).append('\n');
+        }
+        if (debugPort < 0) {
+            child.destroyForcibly();
+            drain(child.getErrorStream(), stdout);
+            child.waitFor();
+            return "{\"ok\":false,\"error\":" + q("JVM con không khởi động được / traced JVM failed to start:\n"
+                    + stdout.toString().trim()) + "}";
+        }
+
+        VirtualMachine vm = attach(debugPort, child, stdout);
+        if (vm == null) {
+            return "{\"ok\":false,\"error\":" + q("Không attach được vào JVM con / could not attach:\n"
+                    + stdout.toString().trim()) + "}";
+        }
+        drainReader(head, stdout);
+        drain(child.getErrorStream(), stdout);
 
         ClassPrepareRequest prepare = vm.eventRequestManager().createClassPrepareRequest();
         prepare.addClassFilter("Main*");
@@ -331,7 +372,8 @@ public class Visualizer {
                 break;
             }
         }
-        vm.process().waitFor();
+        child.destroyForcibly();          // the step loop may have exited early
+        child.waitFor();
 
         return "{\"ok\":true,\"truncated\":" + truncated
                 + ",\"stdout\":" + q(stdout.toString())
@@ -462,6 +504,54 @@ public class Visualizer {
             return sb.append('}').toString();
         }
         return q(v.toString());
+    }
+
+    /** The child suspends until someone attaches; give it a few tries. */
+    private static VirtualMachine attach(int port, Process child, StringBuilder log) {
+        AttachingConnector connector = Bootstrap.virtualMachineManager().attachingConnectors()
+                .stream().filter(c -> c.name().equals("com.sun.jdi.SocketAttach"))
+                .findFirst().orElse(null);
+        if (connector == null) {
+            log.append("no SocketAttach connector in this JDK\n");
+            return null;
+        }
+        Map<String, Connector.Argument> args = connector.defaultArguments();
+        args.get("hostname").setValue("127.0.0.1");
+        args.get("port").setValue(String.valueOf(port));
+        for (int attempt = 0; attempt < 20; attempt++) {
+            try {
+                return connector.attach(args);
+            } catch (Exception e) {
+                if (!child.isAlive()) {
+                    log.append(e).append('\n');
+                    return null;
+                }
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                    return null;
+                }
+            }
+        }
+        log.append("attach timed out after 2s\n");
+        child.destroyForcibly();
+        return null;
+    }
+
+    private static void drainReader(java.io.BufferedReader reader, StringBuilder sink) {
+        Thread.ofVirtual().start(() -> {
+            try (reader) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    synchronized (sink) {
+                        sink.append(line).append('\n');
+                    }
+                }
+            } catch (IOException ignored) {
+                // child JVM exited
+            }
+        });
     }
 
     private static void drain(InputStream in, StringBuilder sink) {

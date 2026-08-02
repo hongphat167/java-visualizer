@@ -9,4 +9,6 @@ COPY fonts ./fonts
 # PORT is injected by the host; VIZ_USER/VIZ_PASS are required to listen publicly.
 ENV PORT=8080
 EXPOSE 8080
-CMD ["java", "Visualizer.java"]
+# The parent JVM holds the server and javac; the traced child gets its own -Xmx96m.
+# Both must fit a 512MB free instance, or the child dies before the JDWP handshake.
+CMD ["java", "-Xmx160m", "Visualizer.java"]
