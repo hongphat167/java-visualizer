@@ -123,6 +123,9 @@ public class Visualizer {
         HttpServer server = HttpServer.create(new InetSocketAddress(host, port), 0);
         HttpContext ui = server.createContext("/", Visualizer::serveIndex);
         HttpContext api = server.createContext("/api/trace", Visualizer::serveTrace);
+        // A platform health check cannot authenticate, so this one route stays open;
+        // it reveals nothing and runs no code.
+        server.createContext("/healthz", ex -> send(ex, 200, "text/plain", "ok"));
 
         // This endpoint compiles and runs whatever it is sent, so a reachable
         // instance must be behind a password. Refuse to open up without one.
@@ -148,8 +151,10 @@ public class Visualizer {
 
         server.setExecutor(Executors.newFixedThreadPool(2));
         server.start();
-        System.out.println("Algorithm visualizer on " + host + ":" + port
-                + (user != null ? " (basic auth on)" : " (local only)"));
+        String mode = (user != null && pass != null && !pass.isBlank()) ? "basic auth"
+                    : "1".equals(System.getenv("VIZ_PUBLIC")) ? "public, no auth"
+                    : "loopback only";
+        System.out.println("Algorithm visualizer on " + host + ":" + port + " (" + mode + ")");
     }
 
     // ---------- HTTP ----------

@@ -4,7 +4,7 @@ services:
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
-    healthCheckPath: /
+    healthCheckPath: /healthz
     envVars:
       # Open to everyone. Submitted code is filtered (no file/network/process/
       # reflection APIs), capped (20KB, 64MB heap, 1 CPU, 15s, 4000 steps) and
