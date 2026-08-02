@@ -1084,9 +1084,9 @@ const VIEW = {
   "KMP — prefix function": { kind: "table", rows: ["p", "pi"] },
   "Reverse words": "linear",
 
-  "Reverse a linked list": "linear",
-  "Floyd cycle detection": "linear",
-  "Merge two sorted lists": "linear",
+  "Reverse a linked list": "list",
+  "Floyd cycle detection": "list",
+  "Merge two sorted lists": "list",
 
   "Balanced parentheses": "stack",
   "Monotonic stack — next greater": "stack",

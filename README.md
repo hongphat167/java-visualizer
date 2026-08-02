@@ -85,7 +85,7 @@ known — and the fallback for code you paste yourself.
 | array + `head`/`tail`, named `queue`/`deque`, or a real `ArrayDeque` | **queue** — live cells left to right, ends tagged `front` / `rear` |
 | `String` | character boxes |
 | `ArrayList`, `ArrayDeque` | contents in real order (the deque's circular buffer is unwrapped) |
-| linked-list nodes (`next` + `val`/`value`/`data`) | the chain, followed up to 64 nodes |
+| linked-list nodes (`next` + `val`/`value`/`data`) | **node → arrow → … → dashed `null`**: head filled, every `Node`-typed local tagged on the node it points at, and `…` instead of `null` when the chain is cyclic or hit the depth cap |
 | `HashMap`, `LinkedHashMap` | `key → value` entries, walked out of the bucket table |
 | `StringBuilder` | the text it currently holds |
 | plain numbers | a chip plus a sparkline of every value it has held so far |

@@ -139,14 +139,24 @@
            border: 3px solid var(--ink); font-family: var(--mono); font-size: 14px; font-weight: 700;
            transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
 
-  .linear { min-height: 300px; display: flex; align-items: center; justify-content: center;
-            border-bottom: 3px solid var(--ink); padding: 10px 0 20px; }
-  .linear .set { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .linear { min-height: 300px; display: flex; align-items: center; justify-content: flex-start;
+            border-bottom: 3px solid var(--ink); padding: 10px 2px 20px; overflow-x: auto; }
+  .linear .set { display: flex; gap: 10px; align-items: center; justify-content: center; }
   .linear .item { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .linear .set { min-width: min-content; margin: 0 auto; }
   .linear .box { min-width: 78px; padding: 16px 14px; border: 3px solid var(--ink);
                  font-family: var(--mono); font-weight: 700; font-size: 19px; text-align: center;
                  box-shadow: 5px 5px 0 var(--ink);
                  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+  /* a linked list draws node → arrow → … → dashed null, per the design */
+  .linear .box.node { min-width: 72px; height: 56px; padding: 0 12px; display: flex;
+                      align-items: center; justify-content: center; }
+  .linear .box.arrow { min-width: 26px; height: 56px; padding: 0; border: none; box-shadow: none;
+                       font-size: 22px; background: transparent; display: flex;
+                       align-items: center; justify-content: center; }
+  .linear .box.nil { min-width: 58px; height: 56px; padding: 0 12px; border: 3px dashed var(--ink);
+                     box-shadow: none; font-size: 13px; background: transparent; color: #8A8070;
+                     display: flex; align-items: center; justify-content: center; }
   .linear .tag { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .5px; }
 
   .transport { border-top: 3px solid var(--ink); padding: 14px 16px; display: flex;
@@ -731,6 +741,17 @@ function unwrapList(o) {
   for (let n = o; n && typeof n === "object" && key in n && out.length < 64; n = n.next) out.push(n[key]);
   return out;
 }
+/** Walks a node chain and says whether it ended at null (a cycle or the tracer's
+ *  depth cap just stops it, and then the tail must not be drawn as null). */
+function chainOf(o) {
+  const key = ["val", "value", "data", "item"].find(k => o && typeof o === "object" && k in o);
+  if (!key) return null;
+  const items = [];
+  let n = o;
+  while (n && typeof n === "object" && key in n && items.length < 64) { items.push(n[key]); n = n.next; }
+  return { items, ended: n === null };
+}
+
 function unwrapMap(o) {
   if (!o || typeof o !== "object" || Array.isArray(o) || !Array.isArray(o.table)) return null;
   const pairs = [];
@@ -774,6 +795,7 @@ function fitsKind(kind, name, v) {
     && (Array.isArray(v[0]) ? v[0].every(x => typeof x === "number")
                             : v.every(x => typeof x === "number"));
   if (kind === "linear") return own === "linear" || own === "bars" || own === "stack" || own === "queue";
+  if (kind === "list") return !!(v && typeof v === "object" && !Array.isArray(v) && chainOf(v));
   if (kind === "tree") return own === "tree" || own === "nodes";
   return own === kind;
 }
@@ -797,11 +819,18 @@ function resolveFigure(steps) {
         const e = counts.get(name) || { name, count: 0, twoD: false, named: /^(dp|memo|table)$/.test(name) };
         e.count++;
         if (Array.isArray(v) && Array.isArray(v[0])) e.twoD = true;
+        if (kind === "list") {
+          const chain = chainOf(v);
+          const len = chain ? chain.items.length : 0;
+          e.reach = Math.max(e.reach || 0, len);
+          e.lastReach = len;      // steps run in order, so this ends up as the final state
+        }
         counts.set(name, e);
       }
     }
     const best = [...counts.values()].sort((a, b) =>
-      (b.twoD - a.twoD) || (b.named - a.named) || (b.count - a.count))[0];
+      (b.twoD - a.twoD) || ((b.lastReach || 0) - (a.lastReach || 0))
+      || ((b.reach || 0) - (a.reach || 0)) || (b.named - a.named) || (b.count - a.count))[0];
     if (best) return { kind, name: best.name };
   }
   return chooseFigure(steps);       // user pasted their own code, or nothing matched
@@ -867,6 +896,10 @@ function figureData(step) {
     return Number.isInteger(from) && Number.isInteger(to)
       ? items.slice(Math.max(0, from), Math.max(0, Math.min(to, items.length))) : items;
   }
+  if (figureSpec.kind === "list") {
+    const chain = v && typeof v === "object" ? chainOf(v) : null;
+    return chain && chain.items.length ? chain : null;
+  }
   if (figureSpec.kind === "linear") {
     if (typeof v === "string") return [...v];
     if (Array.isArray(v)) return v;
@@ -928,7 +961,9 @@ function render() {
   $("stepNo").textContent = `step ${at + 1} / ${steps.length}`;
   $("scrub").value = at;
   $("algoTitle").textContent = algo.toUpperCase()
-    + (figure ? " · " + figure.name + (figure.data.length ? " · n = " + figure.data.length : "") : "");
+    + (figure ? " · " + figure.name
+        + (figure.kind === "list" ? " · n = " + figure.data.items.length
+           : figure.data.length ? " · n = " + figure.data.length : "") : "");
 
   const showVi = lang !== "en", showEn = lang !== "vi";
   $("noteVi").innerHTML = showVi ? notes[at].vi : esc(notes[at].en);
@@ -971,6 +1006,7 @@ function drawFigure(figure, step, prev, pointers) {
     return drawTable(stage, rows, Array.isArray(before) && !Array.isArray(before[0]) ? [before] : before,
                      Array.isArray(figure.data[0]) ? null : [figure.name]);
   }
+  if (figure.kind === "list") return drawList(stage, figure.data, step);
   if (figure.kind === "linear") return drawLinear(stage, figure.data, before, pointers, null);
   if (figure.kind === "stack") return drawLinear(stage, figure.data, before, [], "stack");
   if (figure.kind === "queue") return drawLinear(stage, figure.data, before, [], "queue");
@@ -1110,6 +1146,50 @@ function drawLinear(stage, data, before, pointers, role) {
                          : (!role && (v === 1 || v === true)) ? PAL.done : "#fff";
     box.style.color = (changed || names) ? "#fff" : "var(--ink)";
     item.querySelector(".tag").textContent = edge !== null ? edge : (names ? names.join(" ") : String(i));
+  });
+}
+
+/** Linked list: node → arrow → … → null, head tagged, the node a Node-typed
+ *  local points at highlighted. Mirrors the design's gen_list cells. */
+function drawList(stage, chain, step) {
+  let set = stage.querySelector(".set");
+  if (!set) { stage.innerHTML = `<div class="linear"><div class="set"></div></div>`; set = stage.querySelector(".set"); }
+  set.style.flexDirection = "row";
+
+  // Node-typed locals name the node they sit on (cur, prev, slow, fast, …)
+  const at = new Map();
+  for (const [name, v] of Object.entries(step.vars)) {
+    if (name === figureSpec.name) continue;      // that one is the list itself
+    if (!v || typeof v !== "object" || Array.isArray(v)) continue;
+    const c = chainOf(v);
+    if (!c || !c.items.length) continue;
+    const i = chain.items.indexOf(c.items[0]);
+    if (i >= 0 && !at.has(i)) at.set(i, name);
+  }
+
+  const cells = [];
+  chain.items.forEach((v, i) => {
+    cells.push({ kind: "node", v: fmt(v), tag: at.get(i) || (i === 0 ? "head" : ""),
+                 mark: at.has(i), head: i === 0 });
+    cells.push({ kind: "arrow", v: "→", tag: "" });
+  });
+  cells.push(chain.ended ? { kind: "nil", v: "null", tag: "đuôi / tail" }
+                         : { kind: "nil", v: "…", tag: "còn nữa / more" });
+
+  sync(set, cells.length, () => {
+    const item = document.createElement("div");
+    item.className = "item";
+    item.innerHTML = `<div class="box"></div><div class="tag"></div>`;
+    return item;
+  });
+  [...set.children].forEach((item, i) => {
+    const c = cells[i];
+    const box = item.querySelector(".box");
+    box.className = "box " + c.kind;
+    box.textContent = c.v;
+    box.style.background = c.mark ? PAL.cmp : c.head ? PAL.base : c.kind === "node" ? "#fff" : "";
+    box.style.color = c.mark ? "#fff" : "";
+    item.querySelector(".tag").textContent = c.tag;
   });
 }
 
